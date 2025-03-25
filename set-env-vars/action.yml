@@ -1,0 +1,40 @@
+name: set-env-vars
+description: >-
+  Export all variables with a specific prefix e.g. TEST_MY_VAR, PROD_MY_VAR to environment context without the prefix
+  This is useful for GitHub repositories that are private or do not have the ability to use
+  [Deployment Environments](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
+inputs:
+  environment_prefix:
+    description: >-
+      The prefix to search for in all variables. If left blank, it will export all variables to the environment context
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Expose Github Variables and Secrets with prefix '${{ inputs.environment_prefix }}' to Environment Context
+      env:
+        PREFIX: ${{ inputs.environment_prefix }}
+        SECRETS_CONTEXT: ${{ toJson(secrets) }}
+        VARS_CONTEXT: ${{ toJson(vars) }}
+      run: |
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        to_envs() {
+          jq -r --arg PREFIX "$PREFIX" '
+            ( . // {} )
+            | to_entries
+            | map(select(.key | test("^" + $PREFIX + "_")))
+            | map("\(.key | sub("^" + $PREFIX + "_"; ""))<<'"$EOF"'\n\(.value)\n'"$EOF"'")
+            | .[]' || echo '';
+        }
+
+        # Ensure VARS_CONTEXT is not empty before running jq
+        if [ -n "$VARS_CONTEXT" ] && [ "$VARS_CONTEXT" != "null" ]; then
+          echo "$VARS_CONTEXT" | to_envs >> $GITHUB_ENV
+        fi
+
+        # Ensure SECRETS_CONTEXT is not empty before running jq
+        if [ -n "$SECRETS_CONTEXT" ] && [ "$SECRETS_CONTEXT" != "null" ]; then
+          echo "$SECRETS_CONTEXT" | to_envs >> $GITHUB_ENV
+        fi
+      shell: bash
