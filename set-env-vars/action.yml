@@ -9,14 +9,20 @@ inputs:
       The prefix to search for in all variables. If left blank, it will export all variables to the environment context
     required: false
     default: ''
+  secrets_context:
+    description: JSON formatted secrets context
+    required: false
+  vars_context:
+    description: JSON formatted vars context
+    required: false
 runs:
   using: composite
   steps:
     - name: Expose Github Variables and Secrets with prefix '${{ inputs.environment_prefix }}' to Environment Context
       env:
         PREFIX: ${{ inputs.environment_prefix }}
-        SECRETS_CONTEXT: ${{ toJson(secrets) }}
-        VARS_CONTEXT: ${{ toJson(vars) }}
+        SECRETS_CONTEXT: ${{ inputs.secrets_context }}
+        VARS_CONTEXT: ${{ inputs.vars_context }}
       run: |
         EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
         PREFIX=$(echo "$PREFIX" | tr '[:lower:]' '[:upper:]')
