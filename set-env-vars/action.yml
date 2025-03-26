@@ -30,7 +30,10 @@ runs:
           jq -r --arg PREFIX "$PREFIX" '
             ( . // {} )
             | to_entries
-            | map(select(.key | test("^" + $PREFIX + "_")))
+            | map(select(
+                # If PREFIX is provided, filter by it; otherwise, export all
+                if $PREFIX == "" then true else .key | test("^" + $PREFIX + "_") end
+              ))
             | map("\(.key | sub("^" + $PREFIX + "_"; ""))<<'"$EOF"'\n\(.value)\n'"$EOF"'")
             | .[]' || echo '';
         }
