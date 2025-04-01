@@ -5,7 +5,7 @@ on:
 
 jobs:
   build_push:
-    name: Docker Build & Push Image
+    name: Build & Push
     runs-on: ubuntu-latest
     steps:
       - name: Set Environment
