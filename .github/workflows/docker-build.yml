@@ -42,7 +42,7 @@ jobs:
           echo "Image tag is '$TAG'"
 
       - name: Set Environment Variables
-        uses: ./actions/set-env-vars
+        uses: ./set-env-vars
         with:
           environment_prefix: ${{ steps.set_env.outputs.environment }}
           secrets_context: ${{ toJson(secrets) }}
