@@ -8,9 +8,6 @@ jobs:
     name: Docker Build & Push Image
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Set Environment
         id: set_env
         run: |
@@ -41,8 +38,14 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Image tag is '$TAG'"
 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository }}
+          path: actions
+
       - name: Set Environment Variables
-        uses: ./set-env-vars
+        uses: ./actions/set-env-vars
         with:
           environment_prefix: ${{ steps.set_env.outputs.environment }}
           secrets_context: ${{ toJson(secrets) }}
