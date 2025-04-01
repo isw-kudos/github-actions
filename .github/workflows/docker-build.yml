@@ -1,0 +1,102 @@
+name: Docker Build
+
+on:
+  workflow_call:
+
+jobs:
+  build_push:
+    name: Docker Build & Push Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set Environment
+        id: set_env
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=test" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set tag name
+        id: set_tag
+        run: |
+          # Determine branch name
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BRANCH_NAME="${{ github.head_ref }}"
+          else
+            BRANCH_NAME="${{ github.ref_name }}"
+          fi
+          
+          # If branch is main, use 'latest' tag, otherwise use branch name
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAG="latest"
+          else
+            TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+          fi
+          
+          # Set tag output
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Image tag is '$TAG'"
+
+      - name: Set Environment Variables
+        uses: ./actions/set-env-vars
+        with:
+          environment_prefix: ${{ steps.set_env.outputs.environment }}
+          secrets_context: ${{ toJson(secrets) }}
+          vars_context: ${{ toJson(vars) }}
+
+      - name: Configure AWS Credentials
+        id: aws_auth
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+
+      - name: Login to ECR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        id: build_and_push
+        uses: docker/build-push-action@v6
+        with:
+          # Only building for AMD64 for now
+          # platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.tag }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest,mode=max,oci-mediatypes=true,image-manifest=true
+
+      - name: Trigger Deploy Workflow
+        uses: actions/github-script@v7
+        if: >-
+          steps.set_env.outputs.environment == 'production' 
+          || (steps.set_env.outputs.environment == 'test' && github.ref_name == 'main')
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        with:
+          github-token: ${{ github.token }}
+          retries: 3
+          retry-exempt-status-codes: 204
+          script: |
+            github.rest.actions.createWorkflowDispatch({
+              owner: '${{ github.repository_owner }}',
+              repo: '${{ github.event.repository.name }}',
+              workflow_id: 'deploy.yml',
+              ref: 'main',
+              inputs: {
+                digest: '${{ steps.build_and_push.outputs.digest }}',
+                environment: '${{ steps.set_env.outputs.environment  }}',
+                message: JSON.stringify(process.env.COMMIT_MESSAGE)
+              }
+            })
