@@ -43,6 +43,7 @@ jobs:
         with:
           repository: ISW-AISP/github-actions
           path: actions
+          token: ${{ github.token }}
 
       - name: See folder structure
         run: ls -la ./
