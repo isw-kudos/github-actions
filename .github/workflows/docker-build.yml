@@ -40,12 +40,12 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          path: actions
+
+      - name: See folder structure
+        run: ls -la ./
 
       - name: Set Environment Variables
-        uses: ./actions/set-env-vars
+        uses: ./ISW-AISP/github-actions/set-env-vars
         with:
           environment_prefix: ${{ steps.set_env.outputs.environment }}
           secrets_context: ${{ toJson(secrets) }}
