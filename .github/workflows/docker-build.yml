@@ -38,15 +38,22 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Image tag is '$TAG'"
 
-      - name: Checkout
+      - name: Generate App Token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
+          owner: ISW-AISP
+          repositories: github-actions
+
+      - name: Checkout Custom Actions
         uses: actions/checkout@v4
         with:
+          ref: main
           repository: ISW-AISP/github-actions
+          token: ${{ steps.app_token.outputs.token }}
           path: actions
-          token: ${{ github.token }}
-
-      - name: See folder structure
-        run: ls -la ./
 
       - name: Set Environment Variables
         uses: ./actions/set-env-vars
