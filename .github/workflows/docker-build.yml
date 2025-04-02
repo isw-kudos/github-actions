@@ -2,11 +2,17 @@ name: Docker Build
 
 on:
   workflow_call:
+    outputs:
+      digest:
+        description: The image digest
+        value: ${{ jobs.build_push.outputs.digest }}
 
 jobs:
   build_push:
     name: Build & Push
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build_and_push.outputs.digest }}
     steps:
       - name: Set tag name
         id: set_tag
@@ -17,14 +23,14 @@ jobs:
           else
             BRANCH_NAME="${{ github.ref_name }}"
           fi
-          
+
           # If branch is main, use 'latest' tag, otherwise use branch name
           if [ "$BRANCH_NAME" = "main" ]; then
             TAG="latest"
           else
             TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
           fi
-          
+
           # Set tag output
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Image tag is '$TAG'"
