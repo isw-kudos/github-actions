@@ -1,0 +1,169 @@
+name: ECS Deploy
+run-name: >-
+  🚀 Deploy ${{ inputs.environment }} ${{ github.event.repository.name }}
+  ${{ inputs.message != '' && format('📝 {0}', inputs.message) || '' }}
+  👤 @${{ github.actor }}
+
+on:
+  workflow_call:
+    inputs:
+      cluster_name:
+        description: The name of the ECS cluster where the service is deployed
+        required: true
+        type: string
+      digest:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      message:
+        required: false
+        type: string
+      service_name:
+        description: The name of the ECS service where the task definition is deployed
+        required: true
+        type: string
+      ssm_parameter_name:
+        description: The SSM parameter where the image digest is stored
+        required: true
+        type: string
+
+jobs:
+  set_env_variables:
+    name: Set Variables
+    runs-on: ubuntu-latest
+    outputs:
+      aws_region: ${{ env.AWS_REGION }}
+      aws_role_arn: ${{ env.AWS_ROLE_ARN }}
+      ecr_registry: ${{ env.ECR_REGISTRY }}
+      ecr_repository: ${{ env.ECR_REPOSITORY }}
+    steps:
+      - name: Generate App Token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
+          owner: ISW-AISP
+          repositories: github-actions
+
+      - name: Checkout ISW Actions
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          repository: ISW-AISP/github-actions
+          token: ${{ steps.app_token.outputs.token }}
+          path: actions
+
+      - name: Set Environment Variables
+        uses: ./actions/set-env-vars
+        with:
+          environment_prefix: ${{ inputs.environment }}
+          secrets_context: ${{ toJson(secrets) }}
+          vars_context: ${{ toJson(vars) }}
+
+  determine_image_digest:
+    name: Get Image Digest
+    runs-on: ubuntu-latest
+    if: ${{ inputs.digest == '' || inputs.digest == null || startsWith(inputs.digest, 'sha256') == false }}
+    needs:
+      - set_env_variables
+    outputs:
+      image_digest: ${{ steps.resolve_digest.outputs.digest }}
+    steps:
+      - name: Determine Tag Name
+        id: get_tag
+        if: ${{ inputs.digest == '' || inputs.digest == null }}
+        run: |
+          # If branch is main, use 'latest' tag, otherwise use branch name
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            TAG="latest"
+          else
+            TAG=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Determined tag: $TAG"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ needs.set_env_variables.outputs.aws_region }}
+          role-to-assume: ${{ needs.set_env_variables.outputs.aws_role_arn }}
+
+      - name: Login to ECR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.set_env_variables.outputs.ecr_registry }}
+
+      - name: Resolve Image Digest
+        id: resolve_digest
+        run: |
+          # Attempt to find the most recent image digest for the branch
+          REPOSITORY_NAME="${{ needs.set_env_variables.outputs.ecr_repository }}"
+
+          # Fetch the most recent image digest for the branch
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY_NAME" \
+            --query "imageDetails[?imageTags[?contains(@,\`${{ steps.get_tag.outputs.tag || inputs.digest }}\`)]].[imageDigest]" \
+            --output text)
+
+          # Check if a valid digest was found
+          if [[ "$DIGEST" =~ sha256 ]]; then
+            echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+            echo "Using digest: '$DIGEST'"
+          else
+            echo "::error::No image found for tag ${{ steps.get_tag.outputs.tag || inputs.digest }}"
+            exit 1
+          fi
+
+  update_service:
+    name: Update Service
+    runs-on: ubuntu-latest
+    if: >-
+      always() && needs.set_env_variables.result == 'success' &&
+      (needs.determine_image_digest.result == 'success' || needs.determine_image_digest.result == 'skipped')
+    needs:
+      - determine_image_digest
+      - set_env_variables
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ needs.set_env_variables.outputs.aws_region }}
+          role-to-assume: ${{ needs.set_env_variables.outputs.aws_role_arn }}
+
+      - name: Push Image Digest to SSM
+        run: |
+          aws ssm put-parameter \
+            --name "${{ inputs.ssm_parameter_name }}" \
+            --type "String" \
+            --value "${{ startsWith(inputs.digest, 'sha256') && inputs.digest || needs.determine_image_digest.outputs.image_digest }}" \
+            --overwrite
+
+      - name: Download Current Task definition
+        run: |
+          aws ecs describe-task-definition \
+          --task-definition ${{ inputs.service_name }} \
+          --query taskDefinition > task-definition.json
+
+      - name: Update Image Digest in Task Definition
+        id: task_def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ inputs.container_name }}
+          image: ${{ needs.set_env_variables.outputs.ecr_registry }}/${{ needs.set_env_variables.outputs.ecr_repository}}@${{ startsWith(inputs.digest, 'sha256') && inputs.digest || needs.determine_image_digest.outputs.image_digest }}
+
+      - name: Deploy Updated Task Definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task_def.outputs.task-definition }}
+          service: ${{ inputs.service_name }}
+          cluster: ${{ inputs.cluster_name }}
+          wait-for-service-stability: true
+          propagate-tags: SERVICE
+          wait-for-minutes: 10
