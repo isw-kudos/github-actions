@@ -7,6 +7,10 @@ on:
         description: The name of the ECS cluster where the service is deployed
         required: true
         type: string
+      container_name:
+        description: The name of the container to update in the task definition
+        required: true
+        type: string
       digest:
         required: true
         type: string
