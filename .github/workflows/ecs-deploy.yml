@@ -1,8 +1,4 @@
 name: ECS Deploy
-run-name: >-
-  🚀 Deploy ${{ inputs.environment }} ${{ github.event.repository.name }}
-  ${{ inputs.message != '' && format('📝 {0}', inputs.message) || '' }}
-  👤 @${{ github.actor }}
 
 on:
   workflow_call:
