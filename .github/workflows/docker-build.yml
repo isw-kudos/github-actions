@@ -2,6 +2,11 @@ name: Docker Build
 
 on:
   workflow_call:
+    inputs:
+      environment:
+        description: The environment to use for secrets/variables
+        type: string
+        required: true
     outputs:
       digest:
         description: The image digest
@@ -55,7 +60,7 @@ jobs:
       - name: Set Environment Variables
         uses: ./actions/set-env-vars
         with:
-          environment_prefix: ${{ steps.set_env.outputs.environment }}
+          environment_prefix: ${{ inputs.environment }}
           secrets_context: ${{ toJson(secrets) }}
           vars_context: ${{ toJson(vars) }}
 
