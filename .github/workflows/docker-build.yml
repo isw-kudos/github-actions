@@ -12,6 +12,9 @@ on:
         description: The image digest
         value: ${{ jobs.build_push.outputs.digest }}
 
+env:
+  branch: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+
 jobs:
   build_push:
     name: Build & Push
@@ -19,27 +22,6 @@ jobs:
     outputs:
       digest: ${{ steps.build_and_push.outputs.digest }}
     steps:
-      - name: Set tag name
-        id: set_tag
-        run: |
-          # Determine branch name
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            BRANCH_NAME="${{ github.head_ref }}"
-          else
-            BRANCH_NAME="${{ github.ref_name }}"
-          fi
-
-          # If branch is main, use 'latest' tag, otherwise use branch name
-          if [ "$BRANCH_NAME" = "main" ]; then
-            TAG="latest"
-          else
-            TAG=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
-          fi
-
-          # Set tag output
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Image tag is '$TAG'"
-
       - name: Generate App Token
         uses: actions/create-github-app-token@v1
         id: app_token
@@ -80,15 +62,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}
+          tags: |
+            type=raw,value=${{ env.branch }}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYY-MM-DD' tz='Australia/Sydney'}},enable={{is_default_branch}}
+
       - name: Build and Push Docker Image
         id: build_and_push
         uses: docker/build-push-action@v6
         with:
-          # Only building for AMD64 for now
-          # platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ steps.set_tag.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest
           cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest,mode=max,oci-mediatypes=true,image-manifest=true
