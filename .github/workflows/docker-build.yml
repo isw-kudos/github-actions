@@ -3,10 +3,25 @@ name: Docker Build
 on:
   workflow_call:
     inputs:
+      architecture:
+        default: linux/amd64
+        description: The target CPU architecture to build the image for
+        required: false
+        type: string
+      enable_caching:
+        default: true
+        description: Whether to enable the docker build cache
+        required: false
+        type: boolean
       environment:
         description: The environment to use for secrets/variables
-        type: string
         required: true
+        type: string
+      push:
+        default: true
+        description: Whether to push the image to a remote repository
+        required: false
+        type: boolean
     outputs:
       digest:
         description: The image digest
@@ -59,6 +74,9 @@ jobs:
         with:
           registry: ${{ env.ECR_REGISTRY }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -78,8 +96,8 @@ jobs:
         id: build_and_push
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: ${{ inputs.architecture }}
+          push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest
-          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest,mode=max,oci-mediatypes=true,image-manifest=true
+          cache-from: ${{ inputs.enable_caching && format('type=registry,ref={0}/{1}:latest', env.ECR_REGISTRY, env.ECR_CACHE_REPOSITORY) }}
+          cache-to: ${{ inputs.enable_caching && format('type=registry,ref={0}/{1}:latest,mode=max,oci-mediatypes=true,image-manifest=true', env.ECR_REGISTRY, env.ECR_CACHE_REPOSITORY) }}
