@@ -4,23 +4,24 @@ on:
   workflow_call:
     inputs:
       architecture:
-        description: The target CPU architecture to build the image for
-        type: string
-        required: false
         default: linux/amd64
-      enable_caching:
-        description: Whether to enable the docker build cache
-        type: boolean
+        description: The target CPU architecture to build the image for
         required: false
+        type: string
+      enable_caching:
         default: true
+        description: Whether to enable the docker build cache
+        required: false
+        type: boolean
       environment:
         description: The environment to use for secrets/variables
-        type: string
         required: true
+        type: string
       push:
-        description: Whether to push the image to a remote repository
-        type: boolean
         default: true
+        description: Whether to push the image to a remote repository
+        required: false
+        type: boolean
     outputs:
       digest:
         description: The image digest
