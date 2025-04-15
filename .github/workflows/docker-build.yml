@@ -3,6 +3,11 @@ name: Docker Build
 on:
   workflow_call:
     inputs:
+      architecture:
+        description: The target CPU architecture to build the image for
+        type: string
+        required: false
+        default: linux/amd64
       environment:
         description: The environment to use for secrets/variables
         type: string
@@ -81,7 +86,7 @@ jobs:
         id: build_and_push
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ inputs.architecture }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest
