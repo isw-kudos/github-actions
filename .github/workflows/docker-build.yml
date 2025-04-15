@@ -8,10 +8,19 @@ on:
         type: string
         required: false
         default: linux/amd64
+      enable_caching:
+        description: Whether to enable the docker build cache
+        type: boolean
+        required: false
+        default: true
       environment:
         description: The environment to use for secrets/variables
         type: string
         required: true
+      push:
+        description: Whether to push the image to a remote repository
+        type: boolean
+        default: true
     outputs:
       digest:
         description: The image digest
@@ -52,6 +61,7 @@ jobs:
           vars_context: ${{ toJson(vars) }}
 
       - name: Configure AWS Credentials
+        if: inputs.push
         id: aws_auth
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -60,6 +70,7 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
 
       - name: Login to ECR
+        if: inputs.push
         uses: docker/login-action@v3
         with:
           registry: ${{ env.ECR_REGISTRY }}
@@ -87,7 +98,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           platforms: ${{ inputs.architecture }}
-          push: true
+          push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest
-          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_CACHE_REPOSITORY }}:latest,mode=max,oci-mediatypes=true,image-manifest=true
+          cache-from: ${{ inputs.enable_caching && format('type=registry,ref={0}/{1}:latest', env.ECR_REGISTRY, env.ECR_CACHE_REPOSITORY) }}
+          cache-to: ${{ inputs.enable_caching && format('type=registry,ref={0}/{1}:latest,mode=max,oci-mediatypes=true,image-manifest=true', env.ECR_REGISTRY, env.ECR_CACHE_REPOSITORY) }}
