@@ -11,7 +11,7 @@ on:
         description: The name of the container to update in the task definition
         required: true
         type: string
-      digest:
+      tag:
         required: true
         type: string
       environment:
@@ -30,51 +30,17 @@ on:
         type: string
 
 jobs:
-  set_env_variables:
-    name: Set Variables
-    runs-on: ubuntu-latest
-    outputs:
-      aws_region: ${{ env.AWS_REGION }}
-      aws_role_arn: ${{ env.AWS_ROLE_ARN }}
-      ecr_registry: ${{ env.ECR_REGISTRY }}
-      ecr_repository: ${{ env.ECR_REPOSITORY }}
-    steps:
-      - name: Generate App Token
-        uses: actions/create-github-app-token@v1
-        id: app_token
-        with:
-          app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
-          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
-          owner: ISW-AISP
-          repositories: github-actions
-
-      - name: Checkout ISW Actions
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          repository: ISW-AISP/github-actions
-          token: ${{ steps.app_token.outputs.token }}
-          path: actions
-
-      - name: Set Environment Variables
-        uses: ./actions/set-env-vars
-        with:
-          environment_prefix: ${{ inputs.environment }}
-          secrets_context: ${{ toJson(secrets) }}
-          vars_context: ${{ toJson(vars) }}
-
   determine_image_digest:
     name: Get Image Digest
     runs-on: ubuntu-latest
-    if: ${{ inputs.digest == '' || inputs.digest == null || startsWith(inputs.digest, 'sha256') == false }}
-    needs:
-      - set_env_variables
+    environment: ${{ inputs.environment }}
+    if: ${{ inputs.tag == '' || inputs.tag == null || startsWith(inputs.tag, 'sha256') == false }}
     outputs:
       image_digest: ${{ steps.resolve_digest.outputs.digest }}
     steps:
       - name: Determine Tag Name
         id: get_tag
-        if: ${{ inputs.digest == '' || inputs.digest == null }}
+        if: ${{ inputs.tag == '' || inputs.tag == null }}
         run: |
           # If branch is main, use 'latest' tag, otherwise use branch name
           if [ "${{ github.ref_name }}" = "main" ]; then
@@ -90,24 +56,24 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           audience: sts.amazonaws.com
-          aws-region: ${{ needs.set_env_variables.outputs.aws_region }}
-          role-to-assume: ${{ needs.set_env_variables.outputs.aws_role_arn }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 
       - name: Login to ECR
         uses: docker/login-action@v3
         with:
-          registry: ${{ needs.set_env_variables.outputs.ecr_registry }}
+          registry: ${{ vars.ECR_REGISTRY }}
 
       - name: Resolve Image Digest
         id: resolve_digest
         run: |
           # Attempt to find the most recent image digest for the branch
-          REPOSITORY_NAME="${{ needs.set_env_variables.outputs.ecr_repository }}"
+          REPOSITORY_NAME="${{ vars.ECR_REPOSITORY }}"
 
           # Fetch the most recent image digest for the branch
           DIGEST=$(aws ecr describe-images \
             --repository-name "$REPOSITORY_NAME" \
-            --query "imageDetails[?imageTags[?contains(@,\`${{ steps.get_tag.outputs.tag || inputs.digest }}\`)]].[imageDigest]" \
+            --query "imageDetails[?imageTags[?contains(@,\`${{ steps.get_tag.outputs.tag || inputs.tag }}\`)]].[imageDigest]" \
             --output text)
 
           # Check if a valid digest was found
@@ -115,33 +81,32 @@ jobs:
             echo "digest=$DIGEST" >> $GITHUB_OUTPUT
             echo "Using digest: '$DIGEST'"
           else
-            echo "::error::No image found for tag ${{ steps.get_tag.outputs.tag || inputs.digest }}"
+            echo "::error::No image found for tag ${{ steps.get_tag.outputs.tag || inputs.tag }}"
             exit 1
           fi
 
   update_service:
     name: Update Service
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     if: >-
-      always() && needs.set_env_variables.result == 'success' &&
-      (needs.determine_image_digest.result == 'success' || needs.determine_image_digest.result == 'skipped')
+      always() && (needs.determine_image_digest.result == 'success' || needs.determine_image_digest.result == 'skipped')
     needs:
       - determine_image_digest
-      - set_env_variables
     steps:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           audience: sts.amazonaws.com
-          aws-region: ${{ needs.set_env_variables.outputs.aws_region }}
-          role-to-assume: ${{ needs.set_env_variables.outputs.aws_role_arn }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 
       - name: Push Image Digest to SSM
         run: |
           aws ssm put-parameter \
             --name "${{ inputs.ssm_parameter_name }}" \
             --type "String" \
-            --value "${{ startsWith(inputs.digest, 'sha256') && inputs.digest || needs.determine_image_digest.outputs.image_digest }}" \
+            --value "${{ startsWith(inputs.tag, 'sha256') && inputs.tag || needs.determine_image_digest.outputs.image_digest }}" \
             --overwrite
 
       - name: Download Current Task definition
@@ -156,7 +121,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: ${{ inputs.container_name }}
-          image: ${{ needs.set_env_variables.outputs.ecr_registry }}/${{ needs.set_env_variables.outputs.ecr_repository}}@${{ startsWith(inputs.digest, 'sha256') && inputs.digest || needs.determine_image_digest.outputs.image_digest }}
+          image: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}@${{ startsWith(inputs.tag, 'sha256') && inputs.tag || needs.determine_image_digest.outputs.image_digest }}
 
       - name: Deploy Updated Task Definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
