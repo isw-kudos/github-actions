@@ -8,6 +8,10 @@ on:
         description: The target CPU architecture to build the image for
         required: false
         type: string
+      build_args:
+        description: Build arguments to pass to docker build
+        required: false
+        type: string
       enable_caching:
         default: true
         description: Whether to enable the docker build cache
@@ -73,6 +77,7 @@ jobs:
         id: build_and_push
         uses: docker/build-push-action@v6
         with:
+          build-args: ${{ inputs.build_args }}
           platforms: ${{ inputs.architecture }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
