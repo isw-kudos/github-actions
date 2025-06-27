@@ -101,6 +101,15 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 
+      - name: Save Current Image Digest in case of Failure
+        run: |
+          current_digest=$(aws ssm get-parameter --name "${{ inputs.ssm_parameter_name }}" --query "Parameter.Value" --output text)
+          aws ssm put-parameter \
+            --name "${{ inputs.ssm_parameter_name }}_last_known_working" \
+            --type "String" \
+            --value "$current_digest" \
+            --overwrite
+
       - name: Push Image Digest to SSM
         run: |
           aws ssm put-parameter \
@@ -124,6 +133,7 @@ jobs:
           image: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}@${{ startsWith(inputs.tag, 'sha256') && inputs.tag || needs.determine_image_digest.outputs.image_digest }}
 
       - name: Deploy Updated Task Definition
+        id: deploy
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task_def.outputs.task-definition }}
@@ -132,3 +142,13 @@ jobs:
           wait-for-service-stability: true
           propagate-tags: SERVICE
           wait-for-minutes: 10
+
+      - name: Push Last Working Image Digest to SSM (in case of failure)
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          last_known_working=$(aws ssm get-parameter --name "${{ inputs.ssm_parameter_name }}_last_known_working" --query "Parameter.Value" --output text)
+          aws ssm put-parameter \
+            --name "${{ inputs.ssm_parameter_name }}" \
+            --type "String" \
+            --value "$last_known_working" \
+            --overwrite
