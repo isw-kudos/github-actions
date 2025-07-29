@@ -1,0 +1,30 @@
+name: Sync Mirrors
+
+on: push
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate App Token
+        uses: actions/create-github-app-token@v2
+        id: app_token
+        with:
+          app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
+          owner: ISW-Cloud42
+          repositories: github-actions
+
+      - name: Configure Git for private modules
+        run: |
+          git config --global url."https://oauth2:${PAT}@github.com".insteadOf "https://github.com"
+        env:
+          PAT: ${{ steps.app_token.outputs.token }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync mirrors
+        run: |
+          git remote set-url --push origin https://github.com/ISW-Cloud42/github-actions
+          git push --mirror
