@@ -15,16 +15,17 @@ jobs:
           owner: ISW-Cloud42
           repositories: github-actions
 
-      - name: Configure Git for private modules
+      - name: Configure Git
         run: |
-          git config --global url."https://oauth2:${PAT}@github.com".insteadOf "https://github.com"
-        env:
-          PAT: ${{ steps.app_token.outputs.token }}
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Sync mirrors
         run: |
-          git remote set-url --push origin https://github.com/ISW-Cloud42/github-actions
+          git remote set-url --push origin https://oauth2:${{ steps.app_token.outputs.token }}@github.com/ISW-Cloud42/github-actions
           git push --mirror
