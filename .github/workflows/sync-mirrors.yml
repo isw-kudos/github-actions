@@ -2,6 +2,9 @@ name: Sync Mirrors
 
 on: push
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -13,12 +16,12 @@ jobs:
           app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
           private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
           owner: ISW-Cloud42
-          repositories: github-actions
 
-      - name: Configure Git
+      - name: debug access
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          curl -H "Authorization: Bearer ${{ steps.app_token.outputs.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/ISW-Cloud42/github-actions
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,5 +30,11 @@ jobs:
 
       - name: Sync mirrors
         run: |
-          git remote set-url --push origin https://oauth2:${{ steps.app_token.outputs.token }}@github.com/ISW-Cloud42/github-actions
-          git push --mirror
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone https://x-access-token:${{ steps.app_token.outputs.token }}@github.com/ISW-Cloud42/github-actions.git
+          cd github-actions
+          git remote add source https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          git fetch source
+          git reset --hard source/main
+          git push origin main --force
