@@ -16,6 +16,7 @@ jobs:
           app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
           private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
           owner: ISW-Cloud42
+          repositories: github-actions
 
       - name: debug access
         run: |
