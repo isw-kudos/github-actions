@@ -137,7 +137,7 @@ jobs:
           cluster: ${{ inputs.cluster_name != null && inputs.cluster_name || vars.CLUSTER_NAME }}
           wait-for-service-stability: true
           propagate-tags: SERVICE
-          wait-for-minutes: 10
+          wait-for-minutes: 20
 
       - name: Push Last Working Image Digest to SSM (in case of failure)
         if: steps.deploy.outcome == 'failure'
