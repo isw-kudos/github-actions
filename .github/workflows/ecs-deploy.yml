@@ -139,6 +139,31 @@ jobs:
           propagate-tags: SERVICE
           wait-for-minutes: 20
 
+      - name: Check if deployment was successful
+        id: check-deployment
+        run: |
+          CURRENT_TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster ${{ inputs.cluster_name != null && inputs.cluster_name || vars.CLUSTER_NAME }} \
+            --services ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }} \
+            --query services[0].deployments[0].taskDefinition | jq -r ".")
+          NEW_TASK_DEF_ARN=${{ steps.deploy.outputs.task-definition-arn }}
+          printf "%-20s %s\n" "Current task arn:" "$CURRENT_TASK_DEF_ARN"
+          printf "%-20s %s\n" "New task arn:" "$NEW_TASK_DEF_ARN"
+          if [ "$CURRENT_TASK_DEF_ARN" != "$NEW_TASK_DEF_ARN" ]; then
+            echo "::error::❌ DEPLOYMENT FAILED"
+            echo "::error::The service is NOT running the task definition you just deployed."
+            echo "::error::This possibly means ECS circuit breaker detected a problem and reverted to the previous version."
+            echo "::error::"
+            echo "::error::Common causes:"
+            echo "::error::  - Container failed to start or crashed immediately"
+            echo "::error::  - Health check failures"
+            echo "::error::  - Port binding issues"
+            echo "::error::  - Missing environment variables or secrets"
+            echo "::error::"
+            echo "::error::Check ECS console and CloudWatch logs for details."
+            exit 1
+          fi
+
       - name: Push Last Working Image Digest to SSM (in case of failure)
         if: steps.deploy.outcome == 'failure'
         run: |
