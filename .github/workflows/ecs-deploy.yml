@@ -49,7 +49,7 @@ jobs:
           echo "Determined tag: $TAG"
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           audience: sts.amazonaws.com
           aws-region: ${{ vars.AWS_REGION }}
@@ -91,7 +91,7 @@ jobs:
       - determine_image_digest
     steps:
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           audience: sts.amazonaws.com
           aws-region: ${{ vars.AWS_REGION }}
