@@ -145,7 +145,7 @@ jobs:
           CURRENT_TASK_DEF_ARN=$(aws ecs describe-services \
             --cluster ${{ inputs.cluster_name != null && inputs.cluster_name || vars.CLUSTER_NAME }} \
             --services ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }} \
-            --query services[0].deployments[0].taskDefinition | jq -r ".")
+            --query services[0].taskDefinition | jq -r ".")
           NEW_TASK_DEF_ARN=${{ steps.deploy.outputs.task-definition-arn }}
           printf "%-20s %s\n" "Current task arn:" "$CURRENT_TASK_DEF_ARN"
           printf "%-20s %s\n" "New task arn:" "$NEW_TASK_DEF_ARN"
