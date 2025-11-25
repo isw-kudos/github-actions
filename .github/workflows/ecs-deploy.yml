@@ -90,6 +90,23 @@ jobs:
     needs:
       - determine_image_digest
     steps:
+      - name: Generate App Token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.DEVOPS_ISW_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: github-actions
+
+      - name: Checkout Actions Repo
+        uses: actions/checkout@v6
+        with:
+          path: actions
+          ref: main
+          repository: ${{ github.repository_owner }}/github-actions
+          token: ${{ steps.app-token.outputs.token }}
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -99,7 +116,11 @@ jobs:
 
       - name: Save Current Image Digest in case of Failure
         run: |
-          current_digest=$(aws ssm get-parameter --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" --query "Parameter.Value" --output text)
+          current_digest=$(aws ssm get-parameter \
+            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
+            --query "Parameter.Value" \
+            --output text)
+
           aws ssm put-parameter \
             --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}_last_known_working" \
             --type "String" \
@@ -139,37 +160,45 @@ jobs:
           propagate-tags: SERVICE
           wait-for-minutes: 20
 
-      - name: Check if deployment was successful
+      - name: Check Deployment Status
         id: check-deployment
+        uses: ./actions/.github/actions/ecs-query
+        with:
+          query-type: check-deployment
+          service: ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }}
+          cluster: ${{ inputs.cluster_name != null && inputs.cluster_name || vars.CLUSTER_NAME }}
+          target-task-definition: ${{ steps.deploy.outputs.task-definition-arn }}
+          expected-status: 'COMPLETED'
+          output-format: json
+
+      - name: Validate Deployment Success
         run: |
-          CURRENT_TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster ${{ inputs.cluster_name != null && inputs.cluster_name || vars.CLUSTER_NAME }} \
-            --services ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }} \
-            --query services[0].taskDefinition | jq -r ".")
-          NEW_TASK_DEF_ARN=${{ steps.deploy.outputs.task-definition-arn }}
-          printf "%-20s %s\n" "Current task arn:" "$CURRENT_TASK_DEF_ARN"
-          printf "%-20s %s\n" "New task arn:" "$NEW_TASK_DEF_ARN"
-          if [ "$CURRENT_TASK_DEF_ARN" != "$NEW_TASK_DEF_ARN" ]; then
-            echo "::error::❌ DEPLOYMENT FAILED"
-            echo "::error::The service is NOT running the task definition you just deployed."
-            echo "::error::This possibly means ECS circuit breaker detected a problem and reverted to the previous version."
-            echo "::error::"
-            echo "::error::Common causes:"
-            echo "::error::  - Container failed to start or crashed immediately"
-            echo "::error::  - Health check failures"
-            echo "::error::  - Port binding issues"
-            echo "::error::  - Missing environment variables or secrets"
-            echo "::error::"
-            echo "::error::Check ECS console and CloudWatch logs for details."
+          SUCCESS="${{ steps.check-deployment.outputs.success }}"
+          ROLLOUT_STATE="${{ steps.check-deployment.outputs.rollout-state }}"
+
+          echo "Deployment Status:"
+          echo "  Success: $SUCCESS"
+          echo "  Rollout State: $ROLLOUT_STATE"
+
+          if [ "$SUCCESS" != "true" ]; then
+            echo "❌ Deployment failed or rolled back: $ROLLOUT_STATE"
             exit 1
           fi
 
+          echo "✅ Deployment completed successfully"
+
       - name: Push Last Working Image Digest to SSM (in case of failure)
-        if: steps.deploy.outcome == 'failure'
+        if: ${{ always() && steps.deploy.outcome == 'failure' || steps.check-deployment.outcome == 'failure' }}
         run: |
-          last_known_working=$(aws ssm get-parameter --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}_last_known_working" --query "Parameter.Value" --output text)
+          last_known_working=$(aws ssm get-parameter \
+            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}_last_known_working" \
+            --query "Parameter.Value" \
+            --output text)
+
           aws ssm put-parameter \
             --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
             --type "String" \
             --value "$last_known_working" \
             --overwrite
+
+          echo "⚠️ Restored SSM parameter to last known working digest: $last_known_working"
