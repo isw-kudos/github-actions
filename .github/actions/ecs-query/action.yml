@@ -1,0 +1,51 @@
+name: 'ECS Query'
+description: 'Query AWS ECS services, tasks, and deployments'
+
+inputs:
+  query-type:
+    description: 'Type of query: services|tasks|deployments|check-deployment'
+    required: true
+  cluster:
+    description: 'ECS cluster name'
+    required: true
+  service:
+    description: 'ECS service name'
+    required: false
+  aws-region:
+    description: 'AWS region'
+    required: true
+    default: 'ap-southeast-2'
+  filters:
+    description: 'JSON string with additional filters'
+    required: false
+  output-format:
+    description: 'Output format: json|table|summary|compact'
+    required: false
+    default: 'json'
+  target-task-definition:
+    description: 'Target task definition (for check-deployment): family:revision or full ARN'
+    required: false
+  expected-status:
+    description: 'Expected rollout state: COMPLETED|IN_PROGRESS|ROLLED_BACK|FAILED'
+    required: false
+    default: 'COMPLETED'
+
+outputs:
+  result:
+    description: 'Query result as JSON'
+  summary:
+    description: 'Summary of results'
+  count:
+    description: 'Number of items found'
+  success:
+    description: 'Whether deployment matches expected status (check-deployment only)'
+  rollout-state:
+    description: 'Rollout state of deployment (check-deployment only)'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+
+branding:
+  icon: 'cloud'
+  color: 'orange'
