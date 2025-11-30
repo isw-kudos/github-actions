@@ -75,54 +75,93 @@ def check_deployment_status(
     """
     Check if a deployment for a specific task definition has completed successfully.
 
-    Uses list_service_deployments for more current status data.
+    Uses describe_services to find the deployment by task definition,
+    then gets full status from list_service_deployments.
     """
     try:
-        # Get deployments from the dedicated deployments API (more current)
-        response = ecs_client.list_service_deployments(
+        # First, use describe_services to find the deployment by task definition
+        describe_response = ecs_client.describe_services(
             cluster=cluster,
-            service=service
+            services=[service]
         )
 
+        if not describe_response.get('services'):
+            return {
+                'found': False,
+                'message': f'Service not found: {service}',
+                'success': False,
+            }
+
+        service_obj = describe_response['services'][0]
+        deployments = service_obj.get('deployments', [])
+
         # Find deployment matching the target task definition
-        matching_deployment = None
-        for service_deployment in response.get('serviceDeployments', []):
-            target_revision_arn = service_deployment.get('targetServiceRevisionArn', '')
-
-            # Extract revision number from targetServiceRevisionArn
-            revision_number = target_revision_arn.split('/')[-1] if target_revision_arn else None
-
-            # Match by task definition
-            if _task_def_matches(service_deployment.get('taskDefinition', ''), target_task_definition):
-                matching_deployment = service_deployment
+        matching_deployment_from_describe = None
+        for deployment in deployments:
+            if _task_def_matches(deployment.get('taskDefinition', ''), target_task_definition):
+                matching_deployment_from_describe = deployment
                 break
 
-        if not matching_deployment:
+        if not matching_deployment_from_describe:
             return {
                 'found': False,
                 'message': f'No deployment found for task definition: {target_task_definition}',
                 'success': False,
             }
 
-        rollout_state = matching_deployment.get('rolloutState', 'UNKNOWN')
-        status = matching_deployment.get('status', 'UNKNOWN')
+        # Extract revision number from service revision ID to match with list_service_deployments
+        service_revision_id = matching_deployment_from_describe.get('id', '')
+        revision_number = service_revision_id.split('/')[-1] if service_revision_id else None
 
-        success = rollout_state == expected_status
+        # Now get full deployment details from list_service_deployments
+        deployments_response = ecs_client.list_service_deployments(
+            cluster=cluster,
+            service=service
+        )
+
+        # Find the deployment by matching the targetServiceRevisionArn
+        matching_deployment = None
+        for service_deployment in deployments_response.get('serviceDeployments', []):
+            target_revision_arn = service_deployment.get('targetServiceRevisionArn', '')
+            arn_revision_number = target_revision_arn.split('/')[-1] if target_revision_arn else None
+
+            if revision_number and arn_revision_number == revision_number:
+                matching_deployment = service_deployment
+                break
+
+        # Fall back to data from describe_services if not found in list_service_deployments
+        if not matching_deployment:
+            matching_deployment = matching_deployment_from_describe
+            rollout_state = matching_deployment.get('rolloutState', 'UNKNOWN')
+            status = matching_deployment.get('status', 'UNKNOWN')
+            deployment_arn = None
+        else:
+            # Map status fields from list_service_deployments format
+            status_map = {
+                'ACTIVE': 'PRIMARY',
+                'SUCCESSFUL': 'COMPLETED',
+            }
+            rollout_state = status_map.get(matching_deployment.get('status', ''),
+                                           matching_deployment.get('status', 'UNKNOWN'))
+            status = matching_deployment.get('status', 'UNKNOWN')
+            deployment_arn = matching_deployment.get('serviceDeploymentArn')
+
+        success = rollout_state == expected_status or status == expected_status
 
         result = {
             'found': True,
-            'taskDefinition': matching_deployment.get('taskDefinition'),
-            'deploymentArn': matching_deployment.get('arn'),
+            'taskDefinition': matching_deployment_from_describe.get('taskDefinition'),
+            'deploymentArn': deployment_arn,
             'status': status,
             'rolloutState': rollout_state,
-            'rolloutStateReason': matching_deployment.get('statusReason', ''),
-            'desiredCount': matching_deployment.get('desiredCount'),
-            'runningCount': matching_deployment.get('runningCount'),
-            'deployedAndRunningCount': matching_deployment.get('deployedAndRunningCount'),
-            'deployedCount': matching_deployment.get('deployedCount'),
-            'failedTasks': matching_deployment.get('failedTasks', 0),
-            'createdAt': str(matching_deployment.get('createdAt')),
-            'updatedAt': str(matching_deployment.get('updatedAt')),
+            'rolloutStateReason': matching_deployment.get('statusReason',
+                                                          matching_deployment_from_describe.get('rolloutStateReason',
+                                                                                                '')),
+            'desiredCount': matching_deployment_from_describe.get('desiredCount'),
+            'runningCount': matching_deployment_from_describe.get('runningCount'),
+            'failedTasks': matching_deployment_from_describe.get('failedTasks', 0),
+            'createdAt': str(matching_deployment_from_describe.get('createdAt')),
+            'updatedAt': str(matching_deployment_from_describe.get('updatedAt')),
             'expectedStatus': expected_status,
             'success': success,
             'message': f"Deployment {status}, rollout state: {rollout_state}"
