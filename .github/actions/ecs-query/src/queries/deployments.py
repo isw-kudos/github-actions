@@ -75,27 +75,26 @@ def check_deployment_status(
     """
     Check if a deployment for a specific task definition has completed successfully.
 
-    Args:
-        ecs_client: ECS client
-        cluster: Cluster name
-        service: Service name
-        target_task_definition: Task definition ARN or family:revision (e.g., "my-task:153")
-        expected_status: Expected rollout state (COMPLETED, IN_PROGRESS, ROLLED_BACK, FAILED)
-
-    Returns:
-        Dict with deployment status, rollout state, and success indicator
+    Uses list_service_deployments for more current status data.
     """
     try:
-        deployments = get_deployments(ecs_client, cluster, service)
+        # Get deployments from the dedicated deployments API (more current)
+        response = ecs_client.list_service_deployments(
+            cluster=cluster,
+            service=service
+        )
 
         # Find deployment matching the target task definition
         matching_deployment = None
-        for deployment in deployments:
-            deployment_task_def = deployment.get('taskDefinition', '')
+        for service_deployment in response.get('serviceDeployments', []):
+            target_revision_arn = service_deployment.get('targetServiceRevisionArn', '')
 
-            # Match by full ARN or family:revision
-            if _task_def_matches(deployment_task_def, target_task_definition):
-                matching_deployment = deployment
+            # Extract revision number from targetServiceRevisionArn
+            revision_number = target_revision_arn.split('/')[-1] if target_revision_arn else None
+
+            # Match by task definition
+            if _task_def_matches(service_deployment.get('taskDefinition', ''), target_task_definition):
+                matching_deployment = service_deployment
                 break
 
         if not matching_deployment:
@@ -106,7 +105,6 @@ def check_deployment_status(
             }
 
         rollout_state = matching_deployment.get('rolloutState', 'UNKNOWN')
-        rollout_reason = matching_deployment.get('rolloutStateReason', '')
         status = matching_deployment.get('status', 'UNKNOWN')
 
         success = rollout_state == expected_status
@@ -114,13 +112,14 @@ def check_deployment_status(
         result = {
             'found': True,
             'taskDefinition': matching_deployment.get('taskDefinition'),
-            'deploymentArn': matching_deployment.get('deploymentArn'),
-            'serviceRevisionArn': matching_deployment.get('serviceRevisionArn'),
+            'deploymentArn': matching_deployment.get('arn'),
             'status': status,
             'rolloutState': rollout_state,
-            'rolloutStateReason': rollout_reason,
+            'rolloutStateReason': matching_deployment.get('statusReason', ''),
             'desiredCount': matching_deployment.get('desiredCount'),
             'runningCount': matching_deployment.get('runningCount'),
+            'deployedAndRunningCount': matching_deployment.get('deployedAndRunningCount'),
+            'deployedCount': matching_deployment.get('deployedCount'),
             'failedTasks': matching_deployment.get('failedTasks', 0),
             'createdAt': str(matching_deployment.get('createdAt')),
             'updatedAt': str(matching_deployment.get('updatedAt')),
