@@ -28,7 +28,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: 1.25.4
+          go-version: 1.25.5
 
       - name: Setup Terraform Docs
         run: go install github.com/terraform-docs/terraform-docs@v0.20.0
