@@ -3,12 +3,22 @@
   "extends": [
     "config:recommended"
   ],
+  "minimumReleaseAge": "14 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
   "packageRules": [
     {
       "matchCategories": [
         "python"
       ],
       "groupName": "python dependencies"
+    },
+    {
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "branch"
     }
   ]
 }
