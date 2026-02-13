@@ -31,7 +31,7 @@ runs:
 
     - name: Configure AWS Credentials
       id: aws_auth
-      uses: aws-actions/configure-aws-credentials@v5
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         audience: sts.amazonaws.com
         aws-region: ${{ inputs.aws_region }}
