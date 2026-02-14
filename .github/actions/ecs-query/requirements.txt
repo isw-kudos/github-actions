@@ -1,3 +1,3 @@
-boto3==1.42.46
-botocore==1.42.46
+boto3==1.42.47
+botocore==1.42.47
 tabulate==0.9.0
