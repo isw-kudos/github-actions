@@ -1,0 +1,62 @@
+name: Determine Image Digest
+
+on:
+  workflow_call:
+    outputs:
+      image_digest:
+        description: "The image digest"
+        value: ${{ jobs.determine_image_digest.outputs.image_digest }}
+
+jobs:
+  determine_image_digest:
+    name: Get Image Digest
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.resolve_digest.outputs.image_digest }}
+    steps:
+      - name: Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{date 'YYYY-MM-DD' tz='Australia/Sydney'}},enable={{is_default_branch}}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+
+      - name: Login to ECR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Resolve Image Digest
+        id: resolve_digest
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          # Attempt to find the most recent image digest for the branch
+          REPOSITORY_NAME="${{ vars.ECR_REPOSITORY }}"
+
+          # Fetch the most recent image digest for the branch
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "$REPOSITORY_NAME" \
+            --query "imageDetails[?imageTags[?contains(@,\`${IMAGE_TAG}\`)]].[imageDigest]" \
+            --output text)
+
+          # Check if a valid digest was found
+          if [[ "$DIGEST" =~ sha256 ]]; then
+            echo "image_digest=$DIGEST" >> $GITHUB_OUTPUT
+            echo "Using image digest: '$DIGEST'"
+          else
+            echo "::error::No image found for tag ${IMAGE_TAG}"
+            exit 1
+          fi

@@ -17,10 +17,11 @@ on:
         description: Whether to enable the docker build cache
         required: false
         type: boolean
-      environment:
-        description: The environment to use for secrets/variables
-        required: true
-        type: string
+      provenance:
+        default: true
+        description: Whether to generate provenance for the image
+        required: false
+        type: boolean
       push:
         default: true
         description: Whether to push the image to a remote repository
@@ -38,7 +39,6 @@ jobs:
   build_push:
     name: Build & Push
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
     outputs:
       digest: ${{ steps.build_and_push.outputs.digest }}
     steps:
@@ -79,6 +79,7 @@ jobs:
         with:
           build-args: ${{ inputs.build_args }}
           platforms: ${{ inputs.architecture }}
+          provenance: ${{ inputs.provenance }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           cache-from: ${{ inputs.enable_caching && format('type=registry,ref={0}/{1}:latest', vars.ECR_REGISTRY, vars.ECR_CACHE_REPOSITORY) }}

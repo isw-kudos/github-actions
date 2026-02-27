@@ -9,10 +9,10 @@ on:
       container_name:
         description: The name of the container to update in the task definition
         type: string
-      tag:
+      environment:
         required: true
         type: string
-      environment:
+      image_digest:
         required: true
         type: string
       message:
@@ -26,69 +26,10 @@ on:
         type: string
 
 jobs:
-  determine_image_digest:
-    name: Get Image Digest
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    if: ${{ inputs.tag == null || startsWith(inputs.tag, 'sha256') == false }}
-    outputs:
-      image_digest: ${{ steps.resolve_digest.outputs.digest }}
-    steps:
-      - name: Determine Tag Name
-        id: get_tag
-        if: ${{ inputs.tag == null }}
-        run: |
-          # If branch is main, use 'latest' tag, otherwise use branch name
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            TAG="latest"
-          else
-            TAG=$(echo "${{ github.ref_name }}" | sed 's/\//-/g')
-          fi
-
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Determined tag: $TAG"
-
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          audience: sts.amazonaws.com
-          aws-region: ${{ vars.AWS_REGION }}
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-
-      - name: Login to ECR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ vars.ECR_REGISTRY }}
-
-      - name: Resolve Image Digest
-        id: resolve_digest
-        run: |
-          # Attempt to find the most recent image digest for the branch
-          REPOSITORY_NAME="${{ vars.ECR_REPOSITORY }}"
-
-          # Fetch the most recent image digest for the branch
-          DIGEST=$(aws ecr describe-images \
-            --repository-name "$REPOSITORY_NAME" \
-            --query "imageDetails[?imageTags[?contains(@,\`${{ steps.get_tag.outputs.tag || inputs.tag }}\`)]].[imageDigest]" \
-            --output text)
-
-          # Check if a valid digest was found
-          if [[ "$DIGEST" =~ sha256 ]]; then
-            echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-            echo "Using digest: '$DIGEST'"
-          else
-            echo "::error::No image found for tag ${{ steps.get_tag.outputs.tag || inputs.tag }}"
-            exit 1
-          fi
-
   update_service:
     name: Update Service
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    if: >-
-      always() && (needs.determine_image_digest.result == 'success' || needs.determine_image_digest.result == 'skipped')
-    needs:
-      - determine_image_digest
     steps:
       - name: Generate App Token
         uses: actions/create-github-app-token@v2
@@ -108,7 +49,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           audience: sts.amazonaws.com
           aws-region: ${{ vars.AWS_REGION }}
@@ -132,7 +73,7 @@ jobs:
           aws ssm put-parameter \
             --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
             --type "String" \
-            --value "${{ startsWith(inputs.tag, 'sha256') && inputs.tag || needs.determine_image_digest.outputs.image_digest }}" \
+            --value "${{ inputs.image_digest }}" \
             --overwrite
 
       - name: Download Current Task definition
@@ -147,7 +88,7 @@ jobs:
         with:
           task-definition: task-definition.json
           container-name: ${{ inputs.container_name != null && inputs.container_name || vars.CONTAINER_NAME }}
-          image: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}@${{ startsWith(inputs.tag, 'sha256') && inputs.tag || needs.determine_image_digest.outputs.image_digest }}
+          image: ${{ vars.ECR_REGISTRY }}/${{ vars.ECR_REPOSITORY }}@${{ inputs.image_digest }}
 
       - name: Deploy Updated Task Definition
         id: deploy
