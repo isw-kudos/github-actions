@@ -34,7 +34,7 @@ jobs:
         run: go install github.com/terraform-docs/terraform-docs@v0.20.0
 
       - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.5
+        uses: aquasecurity/setup-trivy@v0.2.6
         with:
           version: v0.64.1
 
