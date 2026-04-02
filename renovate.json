@@ -52,7 +52,7 @@
     },
     {
       "matchManagers": [
-        "regex"
+        "custom.regex"
       ],
       "automerge": false,
       "platformAutomerge": false,
