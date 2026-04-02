@@ -58,5 +58,8 @@
       "platformAutomerge": false,
       "minimumReleaseAge": "14 days"
     }
-  ]
+  ],
+  "pre-commit": {
+    "enabled": true
+  }
 }
