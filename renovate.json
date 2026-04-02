@@ -5,6 +5,28 @@
   ],
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)(?: extractVersion=(?<extractVersion>[^\\s]+))?\\n\\s+[\\w-]+:\\s+(?<currentValue>v?[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.yml$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/terraform-docs/terraform-docs@(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "depNameTemplate": "terraform-docs/terraform-docs",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
   "packageRules": [
     {
       "matchCategories": [
@@ -19,6 +41,22 @@
       ],
       "automerge": true,
       "automergeType": "branch"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "automerge": false,
+      "platformAutomerge": false,
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "matchManagers": [
+        "regex"
+      ],
+      "automerge": false,
+      "platformAutomerge": false,
+      "minimumReleaseAge": "14 days"
     }
   ]
 }

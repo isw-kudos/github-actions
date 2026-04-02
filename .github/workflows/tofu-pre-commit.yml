@@ -8,15 +8,16 @@ jobs:
     name: Run pre-commit checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
+          # renovate: datasource=github-tags depName=python/cpython extractVersion=^v(?<version>.*)$
           python-version: 3.14.3
 
       - name: Cache Go Modules
-        uses: actions/cache@v5
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           path: |
             ~/.cache/go-build
@@ -26,23 +27,26 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
+          # renovate: datasource=github-tags depName=golang/go extractVersion=^go(?<version>.*)$
           go-version: 1.26.1
 
       - name: Setup Terraform Docs
         run: go install github.com/terraform-docs/terraform-docs@v0.20.0
 
       - name: Setup Trivy
-        uses: aquasecurity/setup-trivy@v0.2.6
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
         with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.64.1
 
       - name: Setup OpenTofu
-        uses: opentofu/setup-opentofu@v1
+        uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1
         with:
+          # renovate: datasource=github-releases depName=opentofu/opentofu extractVersion=^v(?<version>.*)$
           tofu_version: 1.10.3
           tofu_wrapper: false
 
       - name: Run Pre-Commit Checks
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
