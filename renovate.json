@@ -47,8 +47,9 @@
         "github-actions"
       ],
       "automerge": false,
-      "platformAutomerge": false,
-      "minimumReleaseAge": "14 days"
+      "pinDigests": true,
+      "minimumReleaseAge": null,
+      "commitMessageSuffix": "(github-actions)"
     },
     {
       "matchManagers": [
