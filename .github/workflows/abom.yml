@@ -42,7 +42,7 @@ jobs:
           go-version: 'stable'
 
       - name: Install abom
-        run: go install github.com/JulietSecurity/abom@e328c89719453f50c39c3a191c6e7b70db8a4f9f
+        run: go install github.com/julietsecurity/abom@v0.2.0
 
       - name: Run ABOM supply chain scan
         id: abom
