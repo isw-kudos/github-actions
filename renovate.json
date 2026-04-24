@@ -58,6 +58,41 @@
       "automerge": false,
       "platformAutomerge": false,
       "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "Scope docker-build workflow dependency updates",
+      "matchFileNames": [".github/workflows/docker-build.yml"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "docker-build",
+      "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope ecs-deploy workflow dependency updates",
+      "matchFileNames": [".github/workflows/ecs-deploy.yml"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "ecs-deploy",
+      "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope ecs-query dependency updates to ecs-deploy component",
+      "matchFileNames": [".github/actions/ecs-query/**"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "ecs-deploy",
+      "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope determine-image-digest workflow dependency updates",
+      "matchFileNames": [".github/workflows/determine-image-digest.yml"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "determine-image-digest",
+      "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope tofu-pre-commit workflow dependency updates",
+      "matchFileNames": [".github/workflows/tofu-pre-commit.yml"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "tofu-pre-commit",
+      "commitMessageSuffix": ""
     }
   ],
   "pre-commit": {

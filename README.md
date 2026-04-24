@@ -9,48 +9,9 @@ This repository contains reusable GitHub Actions for CI/CD, infrastructure autom
 
 ## 🚀 Usage
 
-### Actions
-
-This repository provides the following reusable actions:
-
-#### docker-build-ecr
-Builds and pushes Docker images to Amazon ECR with caching support.
-
-```yaml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Docker Build ECR
-        uses: ISW-Cloud42/github-actions/docker-build-ecr@main
-        with:
-          aws_region: ${{ vars.aws_region }}
-          aws_role_arn: ${{ vars.aws_role_arn }}
-          ecr_registry: ${{ vars.ecr_registry }}
-          ecr_repository: ${{ vars.ecr_repository }}
-          ecr_cache_repository: ${{ vars.ecr_cache_repository }}
-          tag: ${{ vars.tag }}
-```
-
-#### set-env-vars
-Exports variables with a specific prefix to the environment context.
-
-```yaml
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set Environment Variables
-        uses: ISW-Cloud42/github-actions/set-env-vars@main
-        with:
-          environment_prefix: PROD
-          secrets_context: ${{ toJSON(secrets) }}
-          vars_context: ${{ toJSON(vars) }}
-```
-
 ### Reusable Workflows
 
-This repository also provides reusable workflows:
+This repository provides the following reusable workflows. Each is independently versioned — see [Per-Component Versioning](docs/per-component-versioning.md) for details.
 
 #### docker-build
 A comprehensive Docker build workflow with ECR integration.
@@ -58,7 +19,7 @@ A comprehensive Docker build workflow with ECR integration.
 ```yaml
 jobs:
   build:
-    uses: ISW-Cloud42/github-actions/.github/workflows/docker-build.yml@main
+    uses: ISW-Cloud42/github-actions/.github/workflows/docker-build.yml@docker-build-v1.0.0
     with:
       environment: production
       architecture: linux/amd64
@@ -72,7 +33,7 @@ Deploys applications to Amazon ECS with automatic rollback on failure.
 ```yaml
 jobs:
   deploy:
-    uses: ISW-Cloud42/github-actions/.github/workflows/ecs-deploy.yml@main
+    uses: ISW-Cloud42/github-actions/.github/workflows/ecs-deploy.yml@ecs-deploy-v1.0.0
     with:
       environment: production
       cluster_name: my-cluster
@@ -88,47 +49,14 @@ A comprehensive pre-commit workflow with OpenTofu/Terraform tooling including Go
 ```yaml
 jobs:
   pre-commit:
-    uses: ISW-Cloud42/github-actions/.github/workflows/tofu-pre-commit.yml@main
+    uses: ISW-Cloud42/github-actions/.github/workflows/tofu-pre-commit.yml@tofu-pre-commit-v1.0.0
 ```
 
-### Usage From Another Organisation
+#### determine-image-digest
+Resolves the ECR image digest for a given tag.
 
 ```yaml
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Generate App Token
-        uses: actions/create-github-app-token@v1
-        id: app_token
-        with:
-          app-id: ${{ vars.DEPLOY_APP_ID }}
-          private-key: ${{ secrets.DEPLOY_APP_PRIVATE_KEY }}
-          owner: ISW-Cloud42
-          repositories: github-actions
-
-      - name: Checkout reusable workflows
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          repository: ISW-Cloud42/github-actions
-          token: ${{ steps.app_token.outputs.token }}
-          path: .
-
-      - name: Docker Build ECR
-        uses: ./docker-build-ecr
-        with:
-          aws_region: ${{ vars.aws_region }}
-          aws_role_arn: ${{ vars.aws_role_arn }}
-          ecr_registry: ${{ vars.ecr_registry }}
-          ecr_repository: ${{ vars.ecr_repository }}
-          ecr_cache_repository: ${{ vars.ecr_cache_repository }}
-          tag: ${{ vars.tag }}
-
-      - name: Set Environment Variables
-        uses: ./set-env-vars
-        with:
-          environment_prefix: PROD
-          secrets_context: ${{ toJSON(secrets) }}
-          vars_context: ${{ toJSON(vars) }}
+  digest:
+    uses: ISW-Cloud42/github-actions/.github/workflows/determine-image-digest.yml@determine-image-digest-v1.0.0
 ```

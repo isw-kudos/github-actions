@@ -32,3 +32,4 @@ jobs:
           git remote add source https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
           git fetch source
           git push origin 'refs/remotes/source/*:refs/heads/*' --force --prune
+          git push origin --tags --force

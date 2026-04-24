@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is `ISW-Cloud42/github-actions` — a collection of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Actions are referenced by other repositories via `uses: ISW-Cloud42/github-actions/<action>@main`.
+This is `ISW-Cloud42/github-actions` — a collection of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`) and referenced by other repositories via component tags (e.g. `uses: ISW-Cloud42/github-actions/.github/workflows/docker-build.yml@docker-build-v1.0.0`).
 
 ## Commands
 
@@ -45,8 +45,7 @@ pre-commit run --all-files
 
 - **`.github/actions/ecs-query/`** — Docker-based custom Python action for querying AWS ECS (services, tasks, deployments, deployment validation).
 - **`.github/workflows/`** — Reusable workflows called from other repos.
-- **`docker-build-ecr/action.yml`** — Composite action that builds and pushes Docker images to AWS ECR using Docker BuildX with ECR caching and OIDC auth.
-- **`set-env-vars/action.yml`** — Composite action that exports variables with a specific prefix (e.g., `PROD_`) to the GitHub environment context. Used as an alternative to GitHub Deployment Environments.
+- **`releases/`** — Per-component semantic-release configs (see `docs/per-component-versioning.md`).
 
 ### Reusable Workflows
 
