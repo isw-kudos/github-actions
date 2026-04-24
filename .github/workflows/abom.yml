@@ -42,10 +42,7 @@ jobs:
           go-version: 'stable'
 
       - name: Install abom
-        run: |
-          git clone --branch main --depth 1 \
-            https://github.com/JulietSecurity/abom.git /tmp/abom
-          cd /tmp/abom && git checkout e328c89719453f50c39c3a191c6e7b70db8a4f9f && go install .
+        run: go install github.com/JulietSecurity/abom@e328c89719453f50c39c3a191c6e7b70db8a4f9f
 
       - name: Run ABOM supply chain scan
         id: abom

@@ -25,6 +25,19 @@
       ],
       "depNameTemplate": "terraform-docs/terraform-docs",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.yml$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/JulietSecurity/abom@(?<currentDigest>[a-f0-9]+)"
+      ],
+      "depNameTemplate": "JulietSecurity/abom",
+      "datasourceTemplate": "git-refs",
+      "packageNameTemplate": "https://github.com/JulietSecurity/abom",
+      "currentValueTemplate": "main"
     }
   ],
   "packageRules": [
