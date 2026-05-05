@@ -106,6 +106,13 @@
       "semanticCommitType": "fix",
       "semanticCommitScope": "tofu-pre-commit",
       "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope wait-for-required-checks action dependency updates",
+      "matchFileNames": [".github/actions/wait-for-required-checks/**"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "wait-for-required-checks",
+      "commitMessageSuffix": ""
     }
   ],
   "pre-commit": {

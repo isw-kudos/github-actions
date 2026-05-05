@@ -16,6 +16,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | ecs-deploy | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | erc-api-v1, erc-web, erc-pdf |
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |
 | tofu-pre-commit | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` | nat-instance, aws-alb, aws-ecs, aws-instance, aws-vpc, mongo-atlas |
+| wait-for-required-checks | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` | erc-pdf |
 
 ## Version bump rules
 
@@ -118,6 +119,7 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 | `.github/actions/ecs-query/**` | `ecs-deploy` | `fix(ecs-deploy): ...` |
 | `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `fix(determine-image-digest): ...` |
 | `.github/workflows/tofu-pre-commit.yml` | `tofu-pre-commit` | `fix(tofu-pre-commit): ...` |
+| `.github/actions/wait-for-required-checks/**` | `wait-for-required-checks` | `fix(wait-for-required-checks): ...` |
 | Other files | Default (`deps`) | `chore(deps): ...` |
 
 ## Adding a new component

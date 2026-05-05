@@ -1,0 +1,154 @@
+name: Wait for required checks
+description: >-
+  Poll the GitHub Checks API for a list of named check-run contexts on the
+  current PR head SHA. Exit success when every named check has resolved to
+  success / skipped / neutral, or has not registered within a grace window
+  (treated as not-applicable, i.e. the source workflow's path filter excluded
+  this PR). Exit failure if any named check completes with failure /
+  cancelled / timed_out / action_required, or if the overall wait exceeds
+  the maximum.
+
+inputs:
+  required-checks:
+    description: >-
+      Newline-separated list of check-run names (status contexts) to wait
+      for. Match the strings exactly as they appear in the branch ruleset's
+      required_status_checks. For reusable workflows GitHub registers the
+      composite "<caller-job-name> / <called-job-name>" form -- pass that
+      form here.
+    required: true
+  grace-seconds:
+    description: >-
+      Seconds to wait for a check to first appear on the head SHA before
+      treating it as not-applicable. Set high enough to absorb GitHub event
+      scheduling latency for the slowest source workflow.
+    required: false
+    default: "90"
+  poll-seconds:
+    description: Seconds between polls of the Checks API.
+    required: false
+    default: "15"
+  max-wait-seconds:
+    description: Hard upper bound on total wait time before giving up.
+    required: false
+    default: "2400"
+  github-token:
+    description: Token used to read check-runs. Defaults to the workflow token.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for required checks
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        REQUIRED_CHECKS: ${{ inputs.required-checks }}
+        GRACE_SECONDS: ${{ inputs.grace-seconds }}
+        POLL_SECONDS: ${{ inputs.poll-seconds }}
+        MAX_WAIT_SECONDS: ${{ inputs.max-wait-seconds }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${HEAD_SHA}" ]]; then
+          echo "::error::HEAD_SHA is empty -- this action only supports pull_request events."
+          exit 1
+        fi
+
+        mapfile -t names < <(printf '%s\n' "${REQUIRED_CHECKS}" \
+          | sed -e 's/[[:space:]]*$//' -e '/^$/d')
+
+        if [[ ${#names[@]} -eq 0 ]]; then
+          echo "::error::required-checks input is empty."
+          exit 1
+        fi
+
+        echo "Required checks (${#names[@]}):"
+        for n in "${names[@]}"; do echo "  - ${n}"; done
+        echo "Head SHA: ${HEAD_SHA}"
+        echo
+
+        declare -A resolved=()
+        start=$(date +%s)
+
+        while :; do
+          now=$(date +%s)
+          elapsed=$(( now - start ))
+
+          runs=$(gh api \
+            "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
+            --jq '.check_runs')
+
+          all_done=1
+          for n in "${names[@]}"; do
+            if [[ -n "${resolved[$n]:-}" ]]; then continue; fi
+
+            latest=$(jq -r --arg name "$n" '
+              [ .[] | select(.name == $name) ]
+              | sort_by(.started_at // "")
+              | last
+              | if . == null then "ABSENT||"
+                else "\(.status)|\(.conclusion // "")|\(.html_url // "")"
+                end
+            ' <<<"$runs")
+
+            state=${latest%%|*}
+            rest=${latest#*|}
+            conclusion=${rest%%|*}
+            url=${rest#*|}
+
+            case "$state" in
+              ABSENT)
+                if (( elapsed < GRACE_SECONDS )); then
+                  all_done=0
+                  printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "not yet registered (grace ${GRACE_SECONDS}s)"
+                else
+                  resolved[$n]="not-applicable"
+                  printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "absent after grace -> not-applicable (treated as success)"
+                fi
+                ;;
+              queued|in_progress|pending|waiting)
+                all_done=0
+                printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "$state"
+                ;;
+              completed)
+                case "$conclusion" in
+                  success|skipped|neutral)
+                    resolved[$n]="ok ($conclusion)"
+                    printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "$conclusion"
+                    ;;
+                  *)
+                    echo "::error title=Required check failed::${n} concluded with ${conclusion} (${url})"
+                    exit 1
+                    ;;
+                esac
+                ;;
+              *)
+                all_done=0
+                printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "unknown state: ${state}"
+                ;;
+            esac
+          done
+
+          if (( all_done == 1 )); then
+            echo
+            echo "All required checks resolved:"
+            for n in "${names[@]}"; do
+              printf '  %-40s %s\n' "$n" "${resolved[$n]}"
+            done
+            exit 0
+          fi
+
+          if (( elapsed >= MAX_WAIT_SECONDS )); then
+            echo "::error title=Required checks timed out::elapsed ${elapsed}s exceeded max ${MAX_WAIT_SECONDS}s"
+            for n in "${names[@]}"; do
+              printf '  %-40s %s\n' "$n" "${resolved[$n]:-still-pending}"
+            done
+            exit 1
+          fi
+
+          sleep "${POLL_SECONDS}"
+        done
