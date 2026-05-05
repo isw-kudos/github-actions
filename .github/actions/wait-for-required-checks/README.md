@@ -24,11 +24,11 @@ fail to appear within a grace window.
 name: Required Checks
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
 
 concurrency:
-  group: required-${{ github.ref }}
+  group: required-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -51,6 +51,21 @@ jobs:
 
 Then point the branch ruleset's `required_status_checks` at the single context
 `Required Checks` (or whatever the gate job's `name:` resolves to).
+
+### Why `pull_request_target`
+
+Use `pull_request_target` rather than `pull_request` so the gate workflow is
+loaded from the base branch (e.g. `main`) and a PR cannot disable, rename, or
+otherwise tamper with the gate by editing the workflow file in the PR diff.
+
+Because this action only calls `gh api` against the head SHA -- no checkout,
+no execution of PR code -- it is safe to run under `pull_request_target`.
+**Do not** add `actions/checkout` of `${{ github.event.pull_request.head.sha }}`
+or any other step that runs PR-supplied code in the same job.
+
+Note: under `pull_request_target`, `github.ref` is the base branch ref, so use
+`github.event.pull_request.number` for the `concurrency.group` -- otherwise
+all PRs share a group and cancel each other.
 
 **Do not** add a `paths:` filter to the caller workflow. The whole point is
 that the gate runs on every PR.
