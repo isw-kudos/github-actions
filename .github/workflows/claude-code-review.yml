@@ -44,6 +44,10 @@ jobs:
 
       - name: Restore cached Claude verdict
         id: cache
+        # Skip cache when the user manually re-requests review by adding the
+        # 'claude-review' label — guarantees a fresh verdict even if the diff
+        # hash is unchanged.
+        if: ${{ !(github.event.action == 'labeled' && github.event.label.name == 'claude-review') }}
         uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: .claude-review-verdict
