@@ -73,6 +73,13 @@
       "minimumReleaseAge": "14 days"
     },
     {
+      "description": "Scope claude-code-review workflow dependency updates",
+      "matchFileNames": [".github/workflows/claude-code-review.yml"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "claude-code-review",
+      "commitMessageSuffix": ""
+    },
+    {
       "description": "Scope docker-build workflow dependency updates",
       "matchFileNames": [".github/workflows/docker-build.yml"],
       "semanticCommitType": "fix",
