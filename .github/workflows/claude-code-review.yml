@@ -49,6 +49,34 @@ jobs:
           path: .claude-review-verdict
           key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
 
+      - name: Extract Renovate merge-confidence rating
+        id: renovate
+        if: steps.cache.outputs.cache-hit != 'true' && github.event.pull_request.user.login == 'renovate[bot]'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Renovate embeds confidence as shields.io badges in the PR body
+          # table, e.g. confidence-low-..., confidence-high-... — one row per
+          # updated package. Take the lowest rating across all rows so the
+          # signal reflects the weakest link.
+          body=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq .body)
+          levels=$(printf '%s\n' "$body" \
+            | grep -oE 'confidence-(low|neutral|medium|high|very%20high)-' \
+            | sed -E 's/confidence-(.*)-/\1/' \
+            | sort -u || true)
+          if printf '%s\n' "$levels" | grep -qx low; then conf=low
+          elif printf '%s\n' "$levels" | grep -qx neutral; then conf=low
+          elif printf '%s\n' "$levels" | grep -qx medium; then conf=medium
+          elif printf '%s\n' "$levels" | grep -qx high; then conf=high
+          elif printf '%s\n' "$levels" | grep -qx 'very%20high'; then conf=high
+          else conf=""
+          fi
+          echo "Renovate confidence: ${conf:-<none detected>}"
+          echo "confidence=$conf" >> "$GITHUB_OUTPUT"
+
       - name: Exchange GitHub OIDC token for Anthropic access token
         id: anthropic-auth
         if: steps.cache.outputs.cache-hit != 'true'
@@ -99,6 +127,10 @@ jobs:
           plugins: 'code-review@claude-code-plugins'
           prompt: |
             /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+            ${{ steps.renovate.outputs.confidence && format('
+
+            Renovate''s merge-confidence rating for this update is **{0}** (derived from the Age / Adoption / Passing / Confidence badges in the PR body). Factor this signal into your own CONFIDENCE marker. You are NOT bound by it — your own assessment wins — but if your CONFIDENCE differs from Renovate''s, briefly explain why in the review body (e.g. "Renovate reports low due to limited adoption, but the diff is a no-op type-only change so I rate high").
+            ', steps.renovate.outputs.confidence) || '' }}
 
             You MUST post a sticky review comment on the PR even if you find no issues. Trivial or no-op diffs still require the comment so downstream automation can read your verdict. If there are no findings, post a one-line summary plus the markers.
 
