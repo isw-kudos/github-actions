@@ -1,0 +1,190 @@
+name: Claude Code Review
+
+on:
+  workflow_call:
+
+jobs:
+  claude-review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compute PR diff hash
+        id: diff-hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Hash only changed lines per file from the GitHub API. Excludes
+          # commit metadata, blob SHAs, hunk line numbers, and lockfiles
+          # (which churn on Renovate rebase as main's dep tree shifts) —
+          # stable across Renovate rebases when the logical change is
+          # unchanged.
+          hash=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate \
+            --jq '
+              sort_by(.filename)
+              | .[]
+              | select(.filename | test("(^|/)(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|Cargo\\.lock|Pipfile\\.lock|poetry\\.lock|go\\.sum|composer\\.lock|Gemfile\\.lock)$") | not)
+              | "FILE:\(.filename)\n\(.patch // "")"
+            ' \
+            | grep -E '^(FILE:|[+-])' \
+            | sha256sum | cut -d' ' -f1)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "Diff hash: $hash"
+
+      - name: Restore cached Claude verdict
+        id: cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .claude-review-verdict
+          key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
+
+      - name: Exchange GitHub OIDC token for Anthropic access token
+        id: anthropic-auth
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+        run: |
+          set -euo pipefail
+          jwt=$(curl -sS \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value)
+          body=$(jq -n \
+            --arg jwt "$jwt" \
+            --arg frid "$ANTHROPIC_FEDERATION_RULE_ID" \
+            --arg oid "$ANTHROPIC_ORGANIZATION_ID" \
+            --arg sid "$ANTHROPIC_SERVICE_ACCOUNT_ID" \
+            --arg wid "$ANTHROPIC_WORKSPACE_ID" \
+            '{grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:$jwt,federation_rule_id:$frid,organization_id:$oid,service_account_id:$sid,workspace_id:$wid}')
+          response=$(curl -sS -w "\n%{http_code}" -X POST https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            -d "$body")
+          http_code=$(echo "$response" | tail -n1)
+          response_body=$(echo "$response" | sed '$d')
+          if [ "$http_code" != "200" ]; then
+            echo "::error::Token exchange failed (HTTP $http_code): $response_body"
+            exit 1
+          fi
+          access_token=$(echo "$response_body" | jq -r .access_token)
+          if [ -z "$access_token" ] || [ "$access_token" = "null" ]; then
+            echo "::error::Token exchange returned no access_token: $response_body"
+            exit 1
+          fi
+          echo "::add-mask::$access_token"
+          echo "access_token=$access_token" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code Review
+        id: claude-review
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: anthropics/claude-code-action@9db782c3a17ef2bfc274cd17411bc3e0a5ba1345 # v1.0.15
+        with:
+          allowed_bots: 'renovate[bot]'
+          claude_args: '--max-turns 20'
+          claude_code_oauth_token: ${{ steps.anthropic-auth.outputs.access_token }}
+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
+          plugins: 'code-review@claude-code-plugins'
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            You MUST post a sticky review comment on the PR even if you find no issues. Trivial or no-op diffs still require the comment so downstream automation can read your verdict. If there are no findings, post a one-line summary plus the markers.
+
+            The comment's final two lines MUST be exactly these markers, on their own lines, with no extra formatting:
+
+            VERDICT: PASS
+            CONFIDENCE: high
+
+            Replace the values per these rules:
+            - VERDICT: BLOCK if you found any critical bug, security issue, data-loss risk, regression, or breaking change. Otherwise PASS.
+            - CONFIDENCE: low if the diff is too large, unclear, or you could not fully assess test/runtime impact. medium if partial. high if fully understood and verified.
+
+            These markers gate auto-merge. Be honest — prefer BLOCK or low over false confidence.
+          use_sticky_comment: true
+
+      - name: Prune duplicate Claude comments
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            | jq -r '[.[] | select(.user.login == "claude[bot]")] | sort_by(.created_at) | .[:-1] | .[].id')
+          for id in $ids; do
+            echo "Deleting old claude[bot] comment $id"
+            gh api -X DELETE "repos/${REPO}/issues/comments/$id" || true
+          done
+
+      - name: Parse Claude verdict from sticky comment
+        id: parse
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          body=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            | jq -r '[.[] | select(.user.login == "claude[bot]")] | last | .body // empty')
+          if [ -z "$body" ]; then
+            echo "::error::Could not locate Claude review comment on PR #${PR_NUMBER}"
+            exit 1
+          fi
+          verdict=$(printf '%s\n' "$body" | grep -oE '^VERDICT:[[:space:]]*(PASS|BLOCK)' | tail -1 | awk '{print $2}')
+          confidence=$(printf '%s\n' "$body" | grep -oE '^CONFIDENCE:[[:space:]]*(high|medium|low)' | tail -1 | awk '{print $2}')
+          if [ -z "$verdict" ] || [ -z "$confidence" ]; then
+            echo "::error::Claude did not emit VERDICT/CONFIDENCE markers — failing closed"
+            exit 1
+          fi
+          echo "Parsed verdict=$verdict confidence=$confidence"
+          echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+          echo "confidence=$confidence" >> "$GITHUB_OUTPUT"
+
+      - name: Write verdict file for cache
+        if: steps.cache.outputs.cache-hit != 'true' && steps.parse.outputs.verdict != ''
+        run: printf '%s|%s\n' "${{ steps.parse.outputs.verdict }}" "${{ steps.parse.outputs.confidence }}" > .claude-review-verdict
+
+      - name: Save Claude verdict to cache
+        if: steps.cache.outputs.cache-hit != 'true' && steps.parse.outputs.verdict != ''
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .claude-review-verdict
+          key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
+
+      - name: Gate auto-merge on Claude verdict
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
+            cached=$(cat .claude-review-verdict)
+            verdict="${cached%%|*}"
+            confidence="${cached##*|}"
+            confidence="${confidence%$'\n'}"
+            echo "::notice::Reusing cached verdict for unchanged diff (hash ${{ steps.diff-hash.outputs.hash }}): $verdict / $confidence"
+          else
+            verdict="${{ steps.parse.outputs.verdict }}"
+            confidence="${{ steps.parse.outputs.confidence }}"
+            echo "Fresh Claude verdict: $verdict / $confidence"
+          fi
+          if [ "$verdict" = "BLOCK" ]; then
+            echo "::error::Claude verdict: BLOCK. Human review required before merge."
+            exit 1
+          fi
+          if [ "$confidence" = "low" ]; then
+            echo "::error::Claude confidence: low. Human review required before merge."
+            exit 1
+          fi
+          echo "Gate open: $verdict / $confidence"
