@@ -17,6 +17,8 @@ Currently mirrored to:
 
 **Consumers must reference the mirror in their own organization, not this canonical repo.** Replace `<org>` in the examples below with your organization's name (e.g. `ISW-AISP`, `isw-kudos`).
 
+> ⚠️ **Do not commit directly to a mirror repo.** Mirrors are read-only by design — the `sync-mirrors.yml` workflow runs on every push to the canonical `ISW-Cloud42/github-actions` repo and force-pushes all branches and tags with `--prune`. Any commits, branches, or tags pushed directly to a mirror **will be overwritten or deleted** on the next sync. All changes must be made in `ISW-Cloud42/github-actions` and will propagate from there.
+
 To add a new org as a mirror target:
 1. Install the `devops-isw` GitHub App in the new org with access to a `github-actions` repository.
 2. Create the empty `github-actions` repository in that org.
