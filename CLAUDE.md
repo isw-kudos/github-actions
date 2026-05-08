@@ -61,31 +61,18 @@ pre-commit run --all-files
 
 ### Versioning & Releases
 
-Each externally consumed component (workflow or composite action) has its own semver tag prefix and is released independently by [semantic-release](https://github.com/semantic-release/semantic-release). Canonical reference: `docs/per-component-versioning.md`.
+Each externally consumed component is independently versioned with a semver tag prefix and released by semantic-release on push to `main`:
 
-Components and tag prefixes:
+| Component | Tag prefix |
+|---|---|
+| `docker-build` | `docker-build-v` |
+| `ecs-deploy` | `ecs-deploy-v` (also covers `.github/actions/ecs-query/**`) |
+| `determine-image-digest` | `determine-image-digest-v` |
+| `tofu-pre-commit` | `tofu-pre-commit-v` |
+| `wait-for-required-checks` | `wait-for-required-checks-v` |
+| `claude-code-review` | `claude-code-review-v` |
 
-| Component | Tag prefix | Watched paths |
-|---|---|---|
-| `docker-build` | `docker-build-v` | `.github/workflows/docker-build.yml` |
-| `ecs-deploy` | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` |
-| `determine-image-digest` | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` |
-| `tofu-pre-commit` | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` |
-| `wait-for-required-checks` | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` |
-| `claude-code-review` | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` |
-
-Mechanics:
-- Per-component release workflow `.github/workflows/release-<component>.yml` triggers on push to `main` with a `paths:` filter.
-- Runs `npx semantic-release` from `releases/<component>/` (each component has its own `.releaserc.yaml` differing only in `tagFormat`).
-- Bump rules follow Conventional Commits: `feat!`/`BREAKING CHANGE` → major, `feat` → minor, `fix`/`perf`/`chore(deps)` → patch, catch-all → patch.
-- Renovate (`renovate.json`) emits component-scoped commit messages (e.g. `fix(docker-build): ...`) via per-path `packageRules` (`semanticCommitType: fix`, `semanticCommitScope: <component>`, `commitMessageSuffix: ""`) so bot updates trigger the correct component's release as a patch. Updates to `.github/actions/ecs-query/**` are mapped to the `ecs-deploy` scope. New components must get a matching `packageRules` entry — without it, Renovate updates fall through to `chore(deps)` and skip the component's release filter.
-- Tags are mirrored by `sync-mirrors.yml` so consumers in any mirror org can pin `<org>/github-actions@<component>-vX.Y.Z`.
-
-When writing commits or PRs that touch a component, use the matching scope (`feat(ecs-deploy): ...`) so the release version reflects the change accurately. An unscoped commit still cuts a patch release via the catch-all rule.
-
-To add a new component: create `releases/<component>/.releaserc.yaml`, add `release-<component>.yml` with the right `paths:` filter, add a `matchFileNames` rule in `renovate.json`, and seed an initial `<component>-v1.0.0` tag.
-
-Known caveat: `ecs-deploy.yml` checks out this repo at `ref: main` at runtime to access the `ecs-query` action, so the `ecs-deploy` tag pins the workflow YAML but the `ecs-query` code always comes from latest `main`.
+Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker-build): ...`) so commits land in the correct release. Full mechanics — release workflows, Renovate `packageRules` wiring, bump rules, the `ecs-query`/`ecs-deploy` runtime caveat, and steps to add a new component — live in the `per-component-versioning` skill (`.claude/skills/per-component-versioning/SKILL.md`) and `docs/per-component-versioning.md`. Load the skill whenever working on releases, Renovate scope rules, or component additions.
 
 ### Reusable Workflows
 
