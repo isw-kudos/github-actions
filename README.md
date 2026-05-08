@@ -22,11 +22,31 @@ To add a new org as a mirror target:
 2. Create the empty `github-actions` repository in that org.
 3. Add the org to the matrix in [`.github/workflows/sync-mirrors.yml`](.github/workflows/sync-mirrors.yml).
 
+## 🏷️ Versioning & Releases
+
+Each reusable workflow/action is an independently versioned **component** with its own semver tag prefix (e.g. `docker-build-v1.2.3`, `ecs-deploy-v1.2.3`). This means consumers only see updates when the specific component they use actually changes.
+
+Releases are fully automated by [semantic-release](https://github.com/semantic-release/semantic-release):
+
+- A per-component release workflow (`release-<component>.yml`) triggers on push to `main` with a `paths:` filter scoped to that component's files.
+- semantic-release inspects [Conventional Commits](https://www.conventionalcommits.org/) since the last tag for that component to compute the next version, creates a git tag, and publishes a GitHub Release.
+- Renovate dependency PRs use component-scoped commit messages (e.g. `fix(docker-build): ...`) so bot updates trigger the correct component release.
+
+Bump rules:
+
+| Commit type | Bump | Example |
+|---|---|---|
+| `feat!:` / `BREAKING CHANGE:` | Major | `feat(docker-build)!: remove architecture input` |
+| `feat:` | Minor | `feat(ecs-deploy): add rollback timeout parameter` |
+| `fix:` / `perf:` / `chore(deps):` | Patch | `fix(tofu-pre-commit): pin trivy version` |
+
+Tags are pushed to all mirror orgs by `sync-mirrors.yml`, so consumers referencing `<org>/github-actions@<component>-vX.Y.Z` get the same versions as the canonical repo. Full details, Renovate config for consumers, and the steps to add a new component are in [Per-Component Versioning](docs/per-component-versioning.md).
+
 ## 🚀 Usage
 
 ### Reusable Workflows
 
-This repository provides the following reusable workflows. Each is independently versioned — see [Per-Component Versioning](docs/per-component-versioning.md) for details.
+Pin to a component tag (not `@main` or a commit SHA). Each example below uses the component's tag prefix.
 
 #### docker-build
 A comprehensive Docker build workflow with ECR integration.
