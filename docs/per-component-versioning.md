@@ -18,6 +18,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | tofu-pre-commit | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` | nat-instance, aws-alb, aws-ecs, aws-instance, aws-vpc, mongo-atlas |
 | wait-for-required-checks | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` | erc-pdf |
 | claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
+| turbo-repo-cache | `turbo-repo-cache-v` | `.github/actions/turbo-repo-cache/**` | huddo (Turborepo monorepo CI) |
 
 ## Version bump rules
 
@@ -56,6 +57,7 @@ Mapping currently in `renovate.json`:
 | `.github/workflows/tofu-pre-commit.yml` | `fix(tofu-pre-commit): ...` | tofu-pre-commit (patch) |
 | `.github/actions/wait-for-required-checks/**` | `fix(wait-for-required-checks): ...` | wait-for-required-checks (patch) |
 | `.github/workflows/claude-code-review.yml` | `fix(claude-code-review): ...` | claude-code-review (patch) |
+| `.github/actions/turbo-repo-cache/**` | `fix(turbo-repo-cache): ...` | turbo-repo-cache (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | No component release (catch-all, but no `paths:` match) |
 
 Other Renovate behaviours that affect release cadence:
@@ -151,6 +153,7 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 | `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `fix(determine-image-digest): ...` |
 | `.github/workflows/tofu-pre-commit.yml` | `tofu-pre-commit` | `fix(tofu-pre-commit): ...` |
 | `.github/actions/wait-for-required-checks/**` | `wait-for-required-checks` | `fix(wait-for-required-checks): ...` |
+| `.github/actions/turbo-repo-cache/**` | `turbo-repo-cache` | `fix(turbo-repo-cache): ...` |
 | Other files | Default (`deps`) | `chore(deps): ...` |
 
 ## Adding a new component

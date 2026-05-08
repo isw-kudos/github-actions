@@ -97,3 +97,15 @@ jobs:
   digest:
     uses: <org>/github-actions/.github/workflows/determine-image-digest.yml@determine-image-digest-v1.0.0
 ```
+
+#### turbo-repo-cache
+Composite action. Authenticates to GCP via OIDC and starts a local Turborepo remote-cache server backed by a GCS bucket. Subsequent `turbo` commands in the job use the local cache.
+
+```yaml
+steps:
+  - uses: <org>/github-actions/.github/actions/turbo-repo-cache@turbo-repo-cache-v1.0.0
+    with:
+      workload-identity-provider: projects/123/locations/global/workloadIdentityPools/POOL/providers/PROVIDER
+      service-account: my-sa@my-project.iam.gserviceaccount.com
+      storage-path: my-turborepo-cache-bucket
+```

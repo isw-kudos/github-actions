@@ -120,6 +120,13 @@
       "semanticCommitType": "fix",
       "semanticCommitScope": "wait-for-required-checks",
       "commitMessageSuffix": ""
+    },
+    {
+      "description": "Scope turbo-repo-cache action dependency updates",
+      "matchFileNames": [".github/actions/turbo-repo-cache/**"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "turbo-repo-cache",
+      "commitMessageSuffix": ""
     }
   ],
   "pre-commit": {

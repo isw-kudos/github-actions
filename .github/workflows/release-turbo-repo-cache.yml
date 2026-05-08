@@ -1,0 +1,64 @@
+name: Release turbo-repo-cache
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/actions/turbo-repo-cache/**'
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate App Token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.DEVOPS_ISW_APP_ID }}
+          private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Snapshot existing tags
+        run: git tag -l 'turbo-repo-cache-v*' | sort > /tmp/tags_before.txt
+
+      - name: Run semantic-release
+        working-directory: releases/turbo-repo-cache
+        run: npx --package semantic-release@25.0.3 semantic-release
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+      - name: Detect new release
+        id: check
+        run: |
+          git fetch --tags
+          git tag -l 'turbo-repo-cache-v*' | sort > /tmp/tags_after.txt
+          NEW_TAG=$(comm -13 /tmp/tags_before.txt /tmp/tags_after.txt | head -1)
+          if [[ -n "$NEW_TAG" ]]; then
+            echo "released=true"  >> "$GITHUB_OUTPUT"
+            echo "tag=$NEW_TAG"   >> "$GITHUB_OUTPUT"
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          fi

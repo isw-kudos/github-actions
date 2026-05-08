@@ -1,0 +1,40 @@
+name: Setup Turborepo Remote Cache (GCS)
+description: >-
+  Authenticate to Google Cloud via OIDC workload identity federation and
+  start a local Turborepo remote-cache server backed by a Google Cloud
+  Storage bucket. Subsequent `turbo` invocations in the job will read and
+  write cache entries through the local server.
+
+inputs:
+  workload-identity-provider:
+    description: >-
+      Full resource name of the GCP workload identity provider, e.g.
+      projects/123/locations/global/workloadIdentityPools/POOL/providers/PROVIDER.
+    required: true
+  service-account:
+    description: GCP service account email to impersonate via WIF.
+    required: true
+  storage-path:
+    description: GCS bucket name backing the Turborepo remote cache.
+    required: true
+  storage-provider:
+    description: >-
+      Storage backend understood by trappar/turborepo-remote-cache-gh-action
+      (e.g. google-cloud-storage, s3). Defaults to google-cloud-storage.
+    required: false
+    default: google-cloud-storage
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      with:
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}
+
+    - name: Start Turborepo remote cache server
+      uses: trappar/turborepo-remote-cache-gh-action@363c213500bd1ae6700a7027a1cc07a3c5620aab # v1
+      with:
+        storage-provider: ${{ inputs.storage-provider }}
+        storage-path: ${{ inputs.storage-path }}

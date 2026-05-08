@@ -9,16 +9,14 @@ Canonical reference: [`docs/per-component-versioning.md`](../../../docs/per-comp
 
 ## Components and tag prefixes
 
-| Component | Tag prefix | Watched paths |
-|---|---|---|
-| `docker-build` | `docker-build-v` | `.github/workflows/docker-build.yml` |
-| `ecs-deploy` | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` |
-| `determine-image-digest` | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` |
-| `tofu-pre-commit` | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` |
-| `wait-for-required-checks` | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` |
-| `claude-code-review` | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` |
+Full registry: [`docs/per-component-versioning.md`](../../../docs/per-component-versioning.md) (Components table). Two illustrative shapes:
 
-`ecs-query` (under `.github/actions/ecs-query/**`) is part of the **`ecs-deploy`** component — changes there bump `ecs-deploy-v`, not a separate tag.
+| Component | Tag prefix | Watched paths | Notes |
+|---|---|---|---|
+| `ecs-deploy` | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | Multi-path component — `ecs-query` action is part of `ecs-deploy`, not its own tag |
+| `wait-for-required-checks` | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` | Simple single-path action |
+
+Tag prefix convention is `<component>-v`. Watched paths must match the release workflow's `paths:` filter exactly.
 
 ## Release mechanics
 
@@ -45,20 +43,14 @@ semantic-release analyses **all** commits since the last component tag, not just
 
 ## Renovate ↔ release wiring
 
-`renovate.json` `packageRules` map paths to component scopes so bot updates trigger the correct release:
+`renovate.json` `packageRules` map paths to component scopes so bot updates trigger the correct release. Full mapping in [`docs/per-component-versioning.md`](../../../docs/per-component-versioning.md). Pattern:
 
 | Renovate matches | Commit produced | Component released |
 |---|---|---|
-| `.github/workflows/docker-build.yml` | `fix(docker-build): ...` | docker-build (patch) |
-| `.github/workflows/ecs-deploy.yml` | `fix(ecs-deploy): ...` | ecs-deploy (patch) |
-| `.github/actions/ecs-query/**` | `fix(ecs-deploy): ...` | ecs-deploy (patch) |
-| `.github/workflows/determine-image-digest.yml` | `fix(determine-image-digest): ...` | determine-image-digest (patch) |
-| `.github/workflows/tofu-pre-commit.yml` | `fix(tofu-pre-commit): ...` | tofu-pre-commit (patch) |
-| `.github/actions/wait-for-required-checks/**` | `fix(wait-for-required-checks): ...` | wait-for-required-checks (patch) |
-| `.github/workflows/claude-code-review.yml` | `fix(claude-code-review): ...` | claude-code-review (patch) |
+| `.github/actions/<component>/**` or `.github/workflows/<component>.yml` | `fix(<component>): ...` | `<component>` (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | None (no `paths:` match) |
 
-Each scope rule sets `semanticCommitType: "fix"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean).
+Each scope rule sets `semanticCommitType: "fix"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean). Manually use `feat(<component>): ...` for new functionality to get a minor bump.
 
 Other Renovate behaviours that affect cadence:
 
@@ -72,7 +64,7 @@ Other Renovate behaviours that affect cadence:
 2. Create `.github/workflows/release-<component>.yml`. Copy an existing one and only change the `paths:` filter and the `working-directory` for `npx semantic-release`.
 3. Add a `packageRules` entry to `renovate.json` matching the component's files with `semanticCommitType: "fix"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""`. **Skipping this means Renovate updates fall through to `chore(deps)` and miss the release filter.**
 4. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`.
-5. Update `docs/per-component-versioning.md` components table and `CLAUDE.md` components table.
+5. Update `docs/per-component-versioning.md` (Components + Renovate tables) and `CLAUDE.md` components table. This skill's tables are illustrative — no edit needed.
 
 ## Runtime caveat: ecs-deploy
 
