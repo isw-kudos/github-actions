@@ -17,6 +17,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |
 | tofu-pre-commit | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` | nat-instance, aws-alb, aws-ecs, aws-instance, aws-vpc, mongo-atlas |
 | wait-for-required-checks | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` | erc-pdf |
+| claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
 
 ## Version bump rules
 
@@ -35,6 +36,36 @@ Version bumps are determined by [conventional commit](https://www.conventionalco
 Renovate is configured to use component-scoped commit messages (e.g. `fix(docker-build): update docker/build-push-action`). This is done via `semanticCommitScope` rules in `renovate.json`.
 
 Human commits should follow the same convention where practical. If a commit lacks a scope, the catch-all rule still creates a patch release -- no changes are ever missed.
+
+### How Renovate triggers component bumps
+
+`renovate.json` is the source of truth for how dependency updates map to component releases. Each `packageRules` entry that matches a component's files sets:
+
+- `semanticCommitType: "fix"` → patch bump (use `feat` manually for new functionality so you get a minor)
+- `semanticCommitScope: "<component>"` → directs the commit at the right component's release workflow
+- `commitMessageSuffix: ""` → strips the default `(github-actions)` suffix so the commit subject stays a clean Conventional Commit (untouched suffixes still parse, but the empty override keeps history tidy)
+
+Mapping currently in `renovate.json`:
+
+| Path matched by Renovate | Resulting commit | Component released |
+|---|---|---|
+| `.github/workflows/docker-build.yml` | `fix(docker-build): ...` | docker-build (patch) |
+| `.github/workflows/ecs-deploy.yml` | `fix(ecs-deploy): ...` | ecs-deploy (patch) |
+| `.github/actions/ecs-query/**` | `fix(ecs-deploy): ...` | ecs-deploy (patch) — ecs-query is part of the ecs-deploy component |
+| `.github/workflows/determine-image-digest.yml` | `fix(determine-image-digest): ...` | determine-image-digest (patch) |
+| `.github/workflows/tofu-pre-commit.yml` | `fix(tofu-pre-commit): ...` | tofu-pre-commit (patch) |
+| `.github/actions/wait-for-required-checks/**` | `fix(wait-for-required-checks): ...` | wait-for-required-checks (patch) |
+| `.github/workflows/claude-code-review.yml` | `fix(claude-code-review): ...` | claude-code-review (patch) |
+| Anything else | `chore(deps): ... (github-actions)` | No component release (catch-all, but no `paths:` match) |
+
+Other Renovate behaviours that affect release cadence:
+
+- `minimumReleaseAge: "3 days"` (top-level) and `"14 days"` for `custom.regex` managers — Renovate waits this long after an upstream release before opening a PR, so most patch bumps land staggered rather than in bursts.
+- `pinDigests: true` for the `github-actions` manager — action references are pinned by SHA in PRs (e.g. `actions/checkout@<sha> # v6.0.2`); the comment is what Renovate updates when the version moves, which is what triggers the next `fix(<component>)` PR.
+- `automerge: true` for minor/patch updates outside `github-actions` and `custom.regex` managers — those merge themselves, which means the component's release workflow runs without human intervention. **Keep `paths:` filters tight on release workflows; otherwise an automerged dep could publish an unintended release.**
+- `commitMessageSuffix: "(github-actions)"` is set globally for the github-actions manager but overridden to empty for every component-scoped rule. New scope rules added in future should also set `"commitMessageSuffix": ""` to keep release notes clean.
+
+When adding a new component, you must add a matching `packageRules` entry to `renovate.json` — without it, Renovate updates to that component's files would commit as `chore(deps)` and miss the component's release workflow filter (or worse, trigger the wrong component's release if paths overlap).
 
 ## Consuming a versioned workflow
 

@@ -72,12 +72,13 @@ Components and tag prefixes:
 | `determine-image-digest` | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` |
 | `tofu-pre-commit` | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` |
 | `wait-for-required-checks` | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` |
+| `claude-code-review` | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` |
 
 Mechanics:
 - Per-component release workflow `.github/workflows/release-<component>.yml` triggers on push to `main` with a `paths:` filter.
 - Runs `npx semantic-release` from `releases/<component>/` (each component has its own `.releaserc.yaml` differing only in `tagFormat`).
 - Bump rules follow Conventional Commits: `feat!`/`BREAKING CHANGE` → major, `feat` → minor, `fix`/`perf`/`chore(deps)` → patch, catch-all → patch.
-- Renovate (`renovate.json`) emits component-scoped commit messages (e.g. `fix(docker-build): ...`) so bot updates trigger the correct component's release.
+- Renovate (`renovate.json`) emits component-scoped commit messages (e.g. `fix(docker-build): ...`) via per-path `packageRules` (`semanticCommitType: fix`, `semanticCommitScope: <component>`, `commitMessageSuffix: ""`) so bot updates trigger the correct component's release as a patch. Updates to `.github/actions/ecs-query/**` are mapped to the `ecs-deploy` scope. New components must get a matching `packageRules` entry — without it, Renovate updates fall through to `chore(deps)` and skip the component's release filter.
 - Tags are mirrored by `sync-mirrors.yml` so consumers in any mirror org can pin `<org>/github-actions@<component>-vX.Y.Z`.
 
 When writing commits or PRs that touch a component, use the matching scope (`feat(ecs-deploy): ...`) so the release version reflects the change accurately. An unscoped commit still cuts a patch release via the catch-all rule.
