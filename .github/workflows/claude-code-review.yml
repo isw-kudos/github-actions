@@ -53,6 +53,28 @@ jobs:
           path: .claude-review-verdict
           key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
 
+      - name: Clear existing Claude comments
+        # Delete any prior claude[bot] comments before running Claude. Without
+        # this:
+        #  - the code-review plugin sees an existing review with identical
+        #    content and treats the re-run as a no-op (no visible signal);
+        #  - across Renovate synchronize events the action's sticky-comment
+        #    matcher can fail and leave duplicates.
+        # Pre-clearing guarantees exactly one fresh comment per run.
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ids=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
+            | jq -r '.[] | select(.user.login == "claude[bot]") | .id')
+          for id in $ids; do
+            echo "Deleting claude[bot] comment $id"
+            gh api -X DELETE "repos/${REPO}/issues/comments/$id" || true
+          done
+
       - name: Exchange GitHub OIDC token for Anthropic access token
         id: anthropic-auth
         if: steps.cache.outputs.cache-hit != 'true'
@@ -118,21 +140,6 @@ jobs:
             These markers gate auto-merge. Be honest — prefer BLOCK or low over false confidence.
           use_sticky_comment: true
 
-      - name: Prune duplicate Claude comments
-        if: steps.cache.outputs.cache-hit != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          ids=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
-            | jq -r '[.[] | select(.user.login == "claude[bot]")] | sort_by(.created_at) | .[:-1] | .[].id')
-          for id in $ids; do
-            echo "Deleting old claude[bot] comment $id"
-            gh api -X DELETE "repos/${REPO}/issues/comments/$id" || true
-          done
-
       - name: Parse Claude verdict from sticky comment
         id: parse
         if: steps.cache.outputs.cache-hit != 'true'
@@ -168,6 +175,19 @@ jobs:
         with:
           path: .claude-review-verdict
           key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
+
+      - name: Remove 'claude-review' label after re-review
+        # Drop the trigger label so the user can re-add it to fire another
+        # re-review. Runs even if earlier steps failed — otherwise a stuck
+        # label blocks subsequent retries.
+        if: always() && github.event.action == 'labeled' && github.event.label.name == 'claude-review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api -X DELETE "repos/${REPO}/issues/${PR_NUMBER}/labels/claude-review" || true
 
       - name: Gate auto-merge on Claude verdict
         run: |
