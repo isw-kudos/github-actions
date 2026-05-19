@@ -32,10 +32,11 @@ Tag prefix convention is `<component>-v`. Watched paths must match the release w
 |---|---|
 | `feat!:` / `BREAKING CHANGE:` | Major |
 | `feat:` | Minor |
-| `fix:` / `perf:` / `chore(deps):` | Patch |
+| `fix:` / `perf:` | Patch |
+| `chore(<component>):` / `chore(deps):` | Patch (via catch-all) |
 | Anything else | Patch (catch-all) |
 
-Use the matching component scope: `feat(ecs-deploy): ...`, `fix(docker-build): ...`. Unscoped commits still cut a patch via the catch-all but make release notes ambiguous.
+Use the matching component scope: `feat(ecs-deploy): ...`, `fix(docker-build): ...`, `chore(turbo-repo-cache): ...`. Renovate emits `chore(<component>): ...` for dependency bumps; humans use `fix`/`feat` for actual bug fixes and features. Unscoped commits still cut a patch via the catch-all but make release notes ambiguous.
 
 ### Version inflation caveat
 
@@ -47,10 +48,10 @@ semantic-release analyses **all** commits since the last component tag, not just
 
 | Renovate matches | Commit produced | Component released |
 |---|---|---|
-| `.github/actions/<component>/**` or `.github/workflows/<component>.yml` | `fix(<component>): ...` | `<component>` (patch) |
+| `.github/actions/<component>/**` or `.github/workflows/<component>.yml` | `chore(<component>): ...` | `<component>` (patch via catch-all) |
 | Anything else | `chore(deps): ... (github-actions)` | None (no `paths:` match) |
 
-Each scope rule sets `semanticCommitType: "fix"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean). Manually use `feat(<component>): ...` for new functionality to get a minor bump.
+Each scope rule sets `semanticCommitType: "chore"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean). `chore` is used because Renovate is doing maintenance, not bug fixes; the patch bump comes from the `.releaserc.yaml` catch-all rule. Manually use `feat(<component>): ...` for new functionality to get a minor bump, or `fix(<component>): ...` for human bug fixes.
 
 Other Renovate behaviours that affect cadence:
 
@@ -62,7 +63,7 @@ Other Renovate behaviours that affect cadence:
 
 1. Create `releases/<component>/.releaserc.yaml`. Copy an existing one and only change `tagFormat`.
 2. Create `.github/workflows/release-<component>.yml`. Copy an existing one and only change the `paths:` filter and the `working-directory` for `npx semantic-release`.
-3. Add a `packageRules` entry to `renovate.json` matching the component's files with `semanticCommitType: "fix"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""`. **Skipping this means Renovate updates fall through to `chore(deps)` and miss the release filter.**
+3. Add a `packageRules` entry to `renovate.json` matching the component's files with `semanticCommitType: "chore"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""`. **Skipping this means Renovate updates fall through to default `chore(deps)` without the component scope, leaving release notes ambiguous.**
 4. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`.
 5. Update `docs/per-component-versioning.md` (Components + Renovate tables) and `CLAUDE.md` components table. This skill's tables are illustrative — no edit needed.
 
@@ -76,4 +77,4 @@ If a change merged but no release fired:
 1. Check the commit's `paths` actually overlap the release workflow's `paths:` filter.
 2. Check the commit message has a Conventional Commit prefix — purely off-spec messages may be skipped by the analyzer.
 3. Check the release workflow run on the commit — semantic-release logs say "no relevant changes" when nothing in the analysed range warrants a bump.
-4. For Renovate PRs: confirm the right `packageRules` scope rule matched (look at the PR commit subject — wrong scope or `chore(deps)` means the rule didn't match).
+4. For Renovate PRs: confirm the right `packageRules` scope rule matched (look at the PR commit subject — should be `chore(<component>): ...`; bare `chore(deps)` means the scope rule didn't match).

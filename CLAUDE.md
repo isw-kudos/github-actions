@@ -73,7 +73,7 @@ Each externally consumed component is independently versioned with a semver tag 
 | `claude-code-review` | `claude-code-review-v` |
 | `turbo-repo-cache` | `turbo-repo-cache-v` |
 
-Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker-build): ...`) so commits land in the correct release. Full mechanics — release workflows, Renovate `packageRules` wiring, bump rules, the `ecs-query`/`ecs-deploy` runtime caveat, and steps to add a new component — live in the `per-component-versioning` skill (`.claude/skills/per-component-versioning/SKILL.md`) and `docs/per-component-versioning.md`. Load the skill whenever working on releases, Renovate scope rules, or component additions.
+Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker-build): ...`, `chore(turbo-repo-cache): ...`) so commits land in the correct release. Renovate dependency bumps are committed as `chore(<component>): ...`; human bug fixes use `fix(<component>): ...`. Full mechanics — release workflows, Renovate `packageRules` wiring, bump rules, the `ecs-query`/`ecs-deploy` runtime caveat, and steps to add a new component — live in the `per-component-versioning` skill (`.claude/skills/per-component-versioning/SKILL.md`) and `docs/per-component-versioning.md`. Load the skill whenever working on releases, Renovate scope rules, or component additions.
 
 ### Reusable Workflows
 

@@ -29,12 +29,13 @@ Version bumps are determined by [conventional commit](https://www.conventionalco
 | `BREAKING CHANGE:` / `!` | Major | `feat(docker-build)!: remove architecture input` |
 | `feat` | Minor | `feat(ecs-deploy): add rollback timeout parameter` |
 | `fix` / `perf` | Patch | `fix(tofu-pre-commit): pin trivy version` |
-| `chore(deps)` | Patch | `chore(deps): update actions/checkout` |
+| `chore(<component>)` | Patch (via catch-all) | `chore(ecs-deploy): update boto3` (Renovate dep bumps) |
+| `chore(deps)` | Patch | `chore(deps): update actions/checkout` (unscoped fallback) |
 | Anything else | Patch | Catch-all safety net |
 
 ### Scoped commits
 
-Renovate is configured to use component-scoped commit messages (e.g. `fix(docker-build): update docker/build-push-action`). This is done via `semanticCommitScope` rules in `renovate.json`.
+Renovate is configured to use component-scoped commit messages (e.g. `chore(docker-build): update docker/build-push-action`). This is done via `semanticCommitScope` rules in `renovate.json`. Renovate uses `chore` rather than `fix` because dependency bumps are maintenance, not bug fixes.
 
 Human commits should follow the same convention where practical. If a commit lacks a scope, the catch-all rule still creates a patch release -- no changes are ever missed.
 
@@ -42,7 +43,7 @@ Human commits should follow the same convention where practical. If a commit lac
 
 `renovate.json` is the source of truth for how dependency updates map to component releases. Each `packageRules` entry that matches a component's files sets:
 
-- `semanticCommitType: "fix"` → patch bump (use `feat` manually for new functionality so you get a minor)
+- `semanticCommitType: "chore"` → patch bump via the `.releaserc.yaml` catch-all rule (use `feat` manually for new functionality so you get a minor; use `fix` manually for actual bug fixes)
 - `semanticCommitScope: "<component>"` → directs the commit at the right component's release workflow
 - `commitMessageSuffix: ""` → strips the default `(github-actions)` suffix so the commit subject stays a clean Conventional Commit (untouched suffixes still parse, but the empty override keeps history tidy)
 
@@ -50,20 +51,20 @@ Mapping currently in `renovate.json`:
 
 | Path matched by Renovate | Resulting commit | Component released |
 |---|---|---|
-| `.github/workflows/docker-build.yml` | `fix(docker-build): ...` | docker-build (patch) |
-| `.github/workflows/ecs-deploy.yml` | `fix(ecs-deploy): ...` | ecs-deploy (patch) |
-| `.github/actions/ecs-query/**` | `fix(ecs-deploy): ...` | ecs-deploy (patch) — ecs-query is part of the ecs-deploy component |
-| `.github/workflows/determine-image-digest.yml` | `fix(determine-image-digest): ...` | determine-image-digest (patch) |
-| `.github/workflows/tofu-pre-commit.yml` | `fix(tofu-pre-commit): ...` | tofu-pre-commit (patch) |
-| `.github/actions/wait-for-required-checks/**` | `fix(wait-for-required-checks): ...` | wait-for-required-checks (patch) |
-| `.github/workflows/claude-code-review.yml` | `fix(claude-code-review): ...` | claude-code-review (patch) |
-| `.github/actions/turbo-repo-cache/**` | `fix(turbo-repo-cache): ...` | turbo-repo-cache (patch) |
+| `.github/workflows/docker-build.yml` | `chore(docker-build): ...` | docker-build (patch) |
+| `.github/workflows/ecs-deploy.yml` | `chore(ecs-deploy): ...` | ecs-deploy (patch) |
+| `.github/actions/ecs-query/**` | `chore(ecs-deploy): ...` | ecs-deploy (patch) — ecs-query is part of the ecs-deploy component |
+| `.github/workflows/determine-image-digest.yml` | `chore(determine-image-digest): ...` | determine-image-digest (patch) |
+| `.github/workflows/tofu-pre-commit.yml` | `chore(tofu-pre-commit): ...` | tofu-pre-commit (patch) |
+| `.github/actions/wait-for-required-checks/**` | `chore(wait-for-required-checks): ...` | wait-for-required-checks (patch) |
+| `.github/workflows/claude-code-review.yml` | `chore(claude-code-review): ...` | claude-code-review (patch) |
+| `.github/actions/turbo-repo-cache/**` | `chore(turbo-repo-cache): ...` | turbo-repo-cache (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | No component release (catch-all, but no `paths:` match) |
 
 Other Renovate behaviours that affect release cadence:
 
 - `minimumReleaseAge: "3 days"` (top-level) and `"14 days"` for `custom.regex` managers — Renovate waits this long after an upstream release before opening a PR, so most patch bumps land staggered rather than in bursts.
-- `pinDigests: true` for the `github-actions` manager — action references are pinned by SHA in PRs (e.g. `actions/checkout@<sha> # v6.0.2`); the comment is what Renovate updates when the version moves, which is what triggers the next `fix(<component>)` PR.
+- `pinDigests: true` for the `github-actions` manager — action references are pinned by SHA in PRs (e.g. `actions/checkout@<sha> # v6.0.2`); the comment is what Renovate updates when the version moves, which is what triggers the next `chore(<component>)` PR.
 - `automerge: true` for minor/patch updates outside `github-actions` and `custom.regex` managers — those merge themselves, which means the component's release workflow runs without human intervention. **Keep `paths:` filters tight on release workflows; otherwise an automerged dep could publish an unintended release.**
 - `commitMessageSuffix: "(github-actions)"` is set globally for the github-actions manager but overridden to empty for every component-scoped rule. New scope rules added in future should also set `"commitMessageSuffix": ""` to keep release notes clean.
 
@@ -147,13 +148,13 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 
 | Files | Scope | Resulting commit format |
 |---|---|---|
-| `.github/workflows/docker-build.yml` | `docker-build` | `fix(docker-build): ...` |
-| `.github/workflows/ecs-deploy.yml` | `ecs-deploy` | `fix(ecs-deploy): ...` |
-| `.github/actions/ecs-query/**` | `ecs-deploy` | `fix(ecs-deploy): ...` |
-| `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `fix(determine-image-digest): ...` |
-| `.github/workflows/tofu-pre-commit.yml` | `tofu-pre-commit` | `fix(tofu-pre-commit): ...` |
-| `.github/actions/wait-for-required-checks/**` | `wait-for-required-checks` | `fix(wait-for-required-checks): ...` |
-| `.github/actions/turbo-repo-cache/**` | `turbo-repo-cache` | `fix(turbo-repo-cache): ...` |
+| `.github/workflows/docker-build.yml` | `docker-build` | `chore(docker-build): ...` |
+| `.github/workflows/ecs-deploy.yml` | `ecs-deploy` | `chore(ecs-deploy): ...` |
+| `.github/actions/ecs-query/**` | `ecs-deploy` | `chore(ecs-deploy): ...` |
+| `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `chore(determine-image-digest): ...` |
+| `.github/workflows/tofu-pre-commit.yml` | `tofu-pre-commit` | `chore(tofu-pre-commit): ...` |
+| `.github/actions/wait-for-required-checks/**` | `wait-for-required-checks` | `chore(wait-for-required-checks): ...` |
+| `.github/actions/turbo-repo-cache/**` | `turbo-repo-cache` | `chore(turbo-repo-cache): ...` |
 | Other files | Default (`deps`) | `chore(deps): ...` |
 
 ## Adding a new component
@@ -167,7 +168,7 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 
 ### Version inflation
 
-semantic-release analyses all commits since the last component tag, not just those touching the component's files. If an unrelated `feat:` commit lands between two tags, the component may get a minor bump instead of a patch. This is cosmetic -- consumers always get the correct code. In practice it rarely occurs because most commits are Renovate `fix(<component>):` patches.
+semantic-release analyses all commits since the last component tag, not just those touching the component's files. If an unrelated `feat:` commit lands between two tags, the component may get a minor bump instead of a patch. This is cosmetic -- consumers always get the correct code. In practice it rarely occurs because most commits are Renovate `chore(<component>):` patches.
 
 ### ecs-deploy runtime behaviour
 
