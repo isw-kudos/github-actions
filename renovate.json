@@ -3,7 +3,7 @@
   "extends": [
     "config:recommended"
   ],
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "7 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "customManagers": [
     {
@@ -59,18 +59,28 @@
       "matchManagers": [
         "github-actions"
       ],
-      "automerge": false,
       "pinDigests": true,
       "minimumReleaseAge": null,
       "commitMessageSuffix": "(github-actions)"
     },
     {
       "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "matchManagers": [
         "custom.regex"
       ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "automerge": false,
-      "platformAutomerge": false,
-      "minimumReleaseAge": "14 days"
+      "platformAutomerge": false
     },
     {
       "description": "Scope claude-code-review workflow dependency updates",
