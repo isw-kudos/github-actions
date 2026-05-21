@@ -17,3 +17,11 @@ repos:
     hooks:
       - id: renovate-config-validator
         args: [--strict]
+  - repo: local
+    hooks:
+      - id: component-scope-check
+        name: Check versioned component scope in commit message
+        language: script
+        entry: .github/scripts/check-component-scope.sh
+        stages: [commit-msg]
+        pass_filenames: false
