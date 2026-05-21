@@ -26,24 +26,23 @@ Version bumps are determined by [conventional commit](https://www.conventionalco
 
 | Commit type | Version bump | Example |
 |---|---|---|
-| `BREAKING CHANGE:` / `!` | Major | `feat(docker-build)!: remove architecture input` |
-| `feat` | Minor | `feat(ecs-deploy): add rollback timeout parameter` |
-| `fix` / `perf` | Patch | `fix(tofu-pre-commit): pin trivy version` |
-| `chore(<component>)` | Patch (via catch-all) | `chore(ecs-deploy): update boto3` (Renovate dep bumps) |
-| `chore(deps)` | Patch | `chore(deps): update actions/checkout` (unscoped fallback) |
-| Anything else | Patch | Catch-all safety net |
+| `BREAKING CHANGE:` / `!` with component scope | Major | `feat(docker-build)!: remove architecture input` |
+| `feat(<component>)` | Minor | `feat(ecs-deploy): add rollback timeout parameter` |
+| `fix(<component>)` / `perf(<component>)` | Patch | `fix(tofu-pre-commit): pin trivy version` |
+| `chore(<component>)` | Patch | `chore(ecs-deploy): update boto3` (Renovate dep bumps) |
+| Any other scope | No release | Commits scoped to other components are ignored |
 
 ### Scoped commits
 
 Renovate is configured to use component-scoped commit messages (e.g. `chore(docker-build): update docker/build-push-action`). This is done via `semanticCommitScope` rules in `renovate.json`. Renovate uses `chore` rather than `fix` because dependency bumps are maintenance, not bug fixes.
 
-Human commits should follow the same convention where practical. If a commit lacks a scope, the catch-all rule still creates a patch release -- no changes are ever missed.
+Human commits should follow the same convention. Commits without a matching component scope do not trigger a release for that component.
 
 ### How Renovate triggers component bumps
 
 `renovate.json` is the source of truth for how dependency updates map to component releases. Each `packageRules` entry that matches a component's files sets:
 
-- `semanticCommitType: "chore"` → patch bump via the `.releaserc.yaml` catch-all rule (use `feat` manually for new functionality so you get a minor; use `fix` manually for actual bug fixes)
+- `semanticCommitType: "chore"` → patch bump (use `feat` manually for new functionality so you get a minor; use `fix` manually for actual bug fixes)
 - `semanticCommitScope: "<component>"` → directs the commit at the right component's release workflow
 - `commitMessageSuffix: ""` → strips the default `(github-actions)` suffix so the commit subject stays a clean Conventional Commit (untouched suffixes still parse, but the empty override keeps history tidy)
 
@@ -113,17 +112,17 @@ Tags are automatically pushed to the `ISW-AISP/github-actions` mirror via `sync-
 
 ### Release config
 
-Each component has a `.releaserc.yaml` in `releases/<component>/`:
+Each component has a `.releaserc.js` in `releases/<component>/`:
 
 ```
 releases/
-  docker-build/.releaserc.yaml
-  ecs-deploy/.releaserc.yaml
-  determine-image-digest/.releaserc.yaml
-  tofu-pre-commit/.releaserc.yaml
+  docker-build/.releaserc.js
+  ecs-deploy/.releaserc.js
+  determine-image-digest/.releaserc.js
+  tofu-pre-commit/.releaserc.js
 ```
 
-All configs are identical except for the `tagFormat` value. They use plain `semantic-release` (not `semantic-release-monorepo`) because the reusable workflows share the `.github/workflows/` directory, which prevents directory-based commit filtering.
+All configs share the same structure with a `scope` constant. Only commits whose `scope` matches the component's name trigger a release or appear in release notes — all other commits are ignored. They use plain `semantic-release` (not `semantic-release-monorepo`) because the reusable workflows share the `.github/workflows/` directory, which prevents directory-based commit filtering.
 
 ### Release workflows
 
@@ -132,6 +131,15 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 1. Triggers on push to `main` with a `paths:` filter scoped to the component's files
 2. Runs `npx semantic-release` from the component's `releases/<component>/` directory
 3. Creates a git tag and GitHub Release via `@semantic-release/github`
+
+### Commit-msg hook
+
+`.github/scripts/check-component-scope.sh` runs as a `commit-msg` pre-commit hook. It maps staged file paths to their required component scope and rejects the commit if the message scope doesn't match — preventing silent release misses. It must be kept in sync with the `paths:` filters in the release workflows.
+
+Activate locally with:
+```bash
+pre-commit install --hook-type commit-msg
+```
 
 ### Internal-only workflows (not versioned)
 
@@ -159,16 +167,18 @@ Each component has a release workflow in `.github/workflows/release-<component>.
 
 ## Adding a new component
 
-1. Create `releases/<component>/.releaserc.yaml` with the appropriate `tagFormat`
+1. Create `releases/<component>/.releaserc.js` — copy any existing config and update the `scope` constant to the new component name
 2. Create `.github/workflows/release-<component>.yml` with `paths:` filter for the component's files
 3. Add a `matchFileNames` rule to `renovate.json` to scope dependency updates
-4. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`
+4. Add a line to the `case` statement in `.github/scripts/check-component-scope.sh` mapping the component's file path(s) to the new scope — same pattern as the `paths:` filter above
+5. Update the Components table and Renovate table in this file, and the components table in `CLAUDE.md`
+6. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`
 
 ## Known trade-offs
 
 ### Version inflation
 
-semantic-release analyses all commits since the last component tag, not just those touching the component's files. If an unrelated `feat:` commit lands between two tags, the component may get a minor bump instead of a patch. This is cosmetic -- consumers always get the correct code. In practice it rarely occurs because most commits are Renovate `chore(<component>):` patches.
+~~semantic-release analyses all commits since the last component tag, not just those touching the component's files.~~ Each `.releaserc.js` scopes both the commit analyzer and the release notes generator to the component's `scope`. Only commits with a matching scope can trigger a release or appear in release notes — unrelated commits are ignored.
 
 ### ecs-deploy runtime behaviour
 

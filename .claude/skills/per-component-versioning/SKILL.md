@@ -21,7 +21,7 @@ Tag prefix convention is `<component>-v`. Watched paths must match the release w
 ## Release mechanics
 
 - Each component has `.github/workflows/release-<component>.yml` triggered by push to `main` with a `paths:` filter scoped to the component's files.
-- Release workflow runs `npx semantic-release` from `releases/<component>/` (each has its own `.releaserc.yaml` differing only in `tagFormat`).
+- Release workflow runs `npx semantic-release` from `releases/<component>/` (each has its own `.releaserc.js` with a `scope` constant that gates which commits trigger a release and appear in release notes).
 - Plain `semantic-release` is used (not `semantic-release-monorepo`) because reusable workflows share `.github/workflows/`, which prevents directory-based commit filtering.
 - `@semantic-release/github` creates the git tag and GitHub Release.
 - Tags are pushed to all mirror orgs by `sync-mirrors.yml` so consumers in any mirror org see the same versions.
@@ -30,17 +30,13 @@ Tag prefix convention is `<component>-v`. Watched paths must match the release w
 
 | Commit | Bump |
 |---|---|
-| `feat!:` / `BREAKING CHANGE:` | Major |
-| `feat:` | Minor |
-| `fix:` / `perf:` | Patch |
-| `chore(<component>):` / `chore(deps):` | Patch (via catch-all) |
-| Anything else | Patch (catch-all) |
+| `feat(<component>)!:` / `BREAKING CHANGE:` with component scope | Major |
+| `feat(<component>):` | Minor |
+| `fix(<component>):` / `perf(<component>):` | Patch |
+| `chore(<component>):` | Patch |
+| Any other scope | No release |
 
-Use the matching component scope: `feat(ecs-deploy): ...`, `fix(docker-build): ...`, `chore(turbo-repo-cache): ...`. Renovate emits `chore(<component>): ...` for dependency bumps; humans use `fix`/`feat` for actual bug fixes and features. Unscoped commits still cut a patch via the catch-all but make release notes ambiguous.
-
-### Version inflation caveat
-
-semantic-release analyses **all** commits since the last component tag, not just those touching the component's files. An unrelated `feat:` commit can bump a component to a minor when only patches landed. Cosmetic — consumers always get the correct code.
+Use the matching component scope: `feat(ecs-deploy): ...`, `fix(docker-build): ...`, `chore(turbo-repo-cache): ...`. Renovate emits `chore(<component>): ...` for dependency bumps; humans use `fix`/`feat` for actual bug fixes and features. Commits with a non-matching scope are ignored — they do not trigger a release or appear in release notes.
 
 ## Renovate ↔ release wiring
 
@@ -48,10 +44,10 @@ semantic-release analyses **all** commits since the last component tag, not just
 
 | Renovate matches | Commit produced | Component released |
 |---|---|---|
-| `.github/actions/<component>/**` or `.github/workflows/<component>.yml` | `chore(<component>): ...` | `<component>` (patch via catch-all) |
+| `.github/actions/<component>/**` or `.github/workflows/<component>.yml` | `chore(<component>): ...` | `<component>` (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | None (no `paths:` match) |
 
-Each scope rule sets `semanticCommitType: "chore"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean). `chore` is used because Renovate is doing maintenance, not bug fixes; the patch bump comes from the `.releaserc.yaml` catch-all rule. Manually use `feat(<component>): ...` for new functionality to get a minor bump, or `fix(<component>): ...` for human bug fixes.
+Each scope rule sets `semanticCommitType: "chore"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""` (the empty suffix overrides the default `(github-actions)` so subjects stay clean). `chore` is used because Renovate is doing maintenance, not bug fixes. Manually use `feat(<component>): ...` for new functionality to get a minor bump, or `fix(<component>): ...` for human bug fixes.
 
 Other Renovate behaviours that affect cadence:
 
@@ -61,11 +57,12 @@ Other Renovate behaviours that affect cadence:
 
 ## Adding a new component
 
-1. Create `releases/<component>/.releaserc.yaml`. Copy an existing one and only change `tagFormat`.
+1. Create `releases/<component>/.releaserc.js`. Copy an existing one and only change the `scope` constant.
 2. Create `.github/workflows/release-<component>.yml`. Copy an existing one and only change the `paths:` filter and the `working-directory` for `npx semantic-release`.
 3. Add a `packageRules` entry to `renovate.json` matching the component's files with `semanticCommitType: "chore"`, `semanticCommitScope: "<component>"`, `commitMessageSuffix: ""`. **Skipping this means Renovate updates fall through to default `chore(deps)` without the component scope, leaving release notes ambiguous.**
-4. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`.
-5. Update `docs/per-component-versioning.md` (Components + Renovate tables) and `CLAUDE.md` components table. This skill's tables are illustrative — no edit needed.
+4. Add a `case` entry to `.github/scripts/check-component-scope.sh` mapping the component's watched path(s) to the new scope — mirrors the `paths:` filter in the release workflow. **Skipping this means the commit-msg hook won't catch missing scopes for the new component.**
+5. Seed an initial tag: `git tag <component>-v1.0.0 && git push origin --tags`.
+6. Update `docs/per-component-versioning.md` (Components + Renovate tables) and `CLAUDE.md` components table. This skill's tables are illustrative — no edit needed.
 
 ## Runtime caveat: ecs-deploy
 
@@ -75,6 +72,6 @@ Other Renovate behaviours that affect cadence:
 
 If a change merged but no release fired:
 1. Check the commit's `paths` actually overlap the release workflow's `paths:` filter.
-2. Check the commit message has a Conventional Commit prefix — purely off-spec messages may be skipped by the analyzer.
+2. Check the commit message uses the correct component scope (e.g. `fix(docker-build): ...`) — commits without a matching scope are ignored by the analyzer.
 3. Check the release workflow run on the commit — semantic-release logs say "no relevant changes" when nothing in the analysed range warrants a bump.
 4. For Renovate PRs: confirm the right `packageRules` scope rule matched (look at the PR commit subject — should be `chore(<component>): ...`; bare `chore(deps)` means the scope rule didn't match).

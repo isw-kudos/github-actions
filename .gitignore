@@ -1,6 +1,9 @@
 # Ignore IDE files
 .idea
 
+# macOS metadata
+.DS_Store
+
 # Ignore python venv
 /.venv/
 
