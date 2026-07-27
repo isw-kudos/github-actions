@@ -27,7 +27,7 @@ jobs:
             type=raw,value={{date 'YYYY-MM-DD' tz='Australia/Sydney'}},enable={{is_default_branch}}
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           audience: sts.amazonaws.com
           aws-region: ${{ vars.AWS_REGION }}
