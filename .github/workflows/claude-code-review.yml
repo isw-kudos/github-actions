@@ -116,7 +116,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: anthropics/claude-code-action@70a6e5256e9e2366a1ed5c041904a982ba3a328f # v1.0.135
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         with:
           allowed_bots: 'renovate[bot]'
           claude_args: '--max-turns 20'
