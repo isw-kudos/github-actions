@@ -85,7 +85,7 @@ jobs:
 
       - name: Update Image Digest in Task Definition
         id: task_def
-        uses: aws-actions/amazon-ecs-render-task-definition@6853cfae8c3a7d978fbf68b5a55453395541dfbb # v1.8.5
+        uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea # v1.9.0
         with:
           task-definition: task-definition.json
           container-name: ${{ inputs.container_name != null && inputs.container_name || vars.CONTAINER_NAME }}
