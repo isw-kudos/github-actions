@@ -39,7 +39,7 @@ jobs:
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.73.0
+          version: v0.74.0
 
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
