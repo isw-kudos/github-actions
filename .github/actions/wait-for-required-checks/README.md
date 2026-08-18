@@ -1,10 +1,11 @@
 # wait-for-required-checks
 
-Composite action that polls the GitHub Checks API for a list of named check-run
-contexts on a pull request's head SHA. Acts as a single-context aggregator for
-branch protection / repository rulesets, so that one required status (e.g.
-`Required Checks`) can stand in for many real checks -- including ones that may
-not run on every PR because their source workflow is gated by `paths:`.
+Node action (`using: node24`, `index.cjs`, zero npm dependencies) that polls
+the GitHub Checks API for a list of named check-run contexts on a pull
+request's head SHA. Acts as a single-context aggregator for branch protection
+/ repository rulesets, so that one required status (e.g. `Required Checks`)
+can stand in for many real checks -- including ones that may not run on every
+PR because their source workflow is gated by `paths:`.
 
 ## Why
 
@@ -58,7 +59,7 @@ Use `pull_request_target` rather than `pull_request` so the gate workflow is
 loaded from the base branch (e.g. `main`) and a PR cannot disable, rename, or
 otherwise tamper with the gate by editing the workflow file in the PR diff.
 
-Because this action only calls `gh api` against the head SHA -- no checkout,
+Because this action only reads the Checks API for the head SHA -- no checkout,
 no execution of PR code -- it is safe to run under `pull_request_target`.
 **Do not** add `actions/checkout` of `${{ github.event.pull_request.head.sha }}`
 or any other step that runs PR-supplied code in the same job.
@@ -78,7 +79,8 @@ that the gate runs on every PR.
 | `grace-seconds` | no | `90` | Seconds to wait for a check to first appear on the head SHA before treating it as not-applicable. Bump this if your slowest workflow can take longer than 90s to be queued by GitHub. |
 | `poll-seconds` | no | `15` | Seconds between polls of the Checks API. |
 | `max-wait-seconds` | no | `2400` | Hard ceiling on total wait time. |
-| `github-token` | no | `${{ github.token }}` | Token used for `gh api` calls. Needs `checks: read` and `pull-requests: read` scopes (already true for the default `GITHUB_TOKEN`). |
+| `head-sha` | no | `${{ github.event.pull_request.head.sha }}` | Commit SHA to read check-runs for. |
+| `github-token` | no | `${{ github.token }}` | Token used for Checks API calls. Needs `checks: read` (already true for the default `GITHUB_TOKEN`). |
 
 ## Resolution rules
 
@@ -93,3 +95,10 @@ For each required check, the action picks the most recent matching check-run
 | `completed` + `success` / `skipped` / `neutral` | success |
 | `completed` + `failure` / `cancelled` / `timed_out` / `action_required` | gate fails immediately, naming the failed check |
 | Total elapsed > `max-wait-seconds` | gate fails with a timeout error |
+
+## Testing
+
+`index.cjs` exports its pure helpers (`parseNames`, `latestFor`,
+`classifyLatest`, `nextLink`) and only runs the poll loop when invoked
+directly, so the resolution rules can be unit-tested with plain `node` -- no
+runner required.

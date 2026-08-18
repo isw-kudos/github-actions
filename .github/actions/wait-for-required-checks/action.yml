@@ -8,6 +8,9 @@ description: >-
   cancelled / timed_out / action_required, or if the overall wait exceeds
   the maximum.
 
+# Logic is implemented in Node (index.cjs, zero npm dependencies) — see
+# README.md. The pure helpers are exported for unit testing with plain node.
+
 inputs:
   required-checks:
     description: >-
@@ -32,123 +35,18 @@ inputs:
     description: Hard upper bound on total wait time before giving up.
     required: false
     default: "2400"
+  head-sha:
+    description: >-
+      Commit SHA to read check-runs for. Defaults to the PR head SHA from the
+      triggering event; this action only supports pull_request /
+      pull_request_target events.
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
   github-token:
     description: Token used to read check-runs. Defaults to the workflow token.
     required: false
     default: ${{ github.token }}
 
 runs:
-  using: composite
-  steps:
-    - name: Wait for required checks
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        REPO: ${{ github.repository }}
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        REQUIRED_CHECKS: ${{ inputs.required-checks }}
-        GRACE_SECONDS: ${{ inputs.grace-seconds }}
-        POLL_SECONDS: ${{ inputs.poll-seconds }}
-        MAX_WAIT_SECONDS: ${{ inputs.max-wait-seconds }}
-      run: |
-        set -euo pipefail
-
-        if [[ -z "${HEAD_SHA}" ]]; then
-          echo "::error::HEAD_SHA is empty -- this action only supports pull_request events."
-          exit 1
-        fi
-
-        mapfile -t names < <(printf '%s\n' "${REQUIRED_CHECKS}" \
-          | sed -e 's/[[:space:]]*$//' -e '/^$/d')
-
-        if [[ ${#names[@]} -eq 0 ]]; then
-          echo "::error::required-checks input is empty."
-          exit 1
-        fi
-
-        echo "Required checks (${#names[@]}):"
-        for n in "${names[@]}"; do echo "  - ${n}"; done
-        echo "Head SHA: ${HEAD_SHA}"
-        echo
-
-        declare -A resolved=()
-        start=$(date +%s)
-
-        while :; do
-          now=$(date +%s)
-          elapsed=$(( now - start ))
-
-          runs=$(gh api \
-            "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" \
-            --jq '.check_runs')
-
-          all_done=1
-          for n in "${names[@]}"; do
-            if [[ -n "${resolved[$n]:-}" ]]; then continue; fi
-
-            latest=$(jq -r --arg name "$n" '
-              [ .[] | select(.name == $name) ]
-              | sort_by(.started_at // "")
-              | last
-              | if . == null then "ABSENT||"
-                else "\(.status)|\(.conclusion // "")|\(.html_url // "")"
-                end
-            ' <<<"$runs")
-
-            state=${latest%%|*}
-            rest=${latest#*|}
-            conclusion=${rest%%|*}
-            url=${rest#*|}
-
-            case "$state" in
-              ABSENT)
-                if (( elapsed < GRACE_SECONDS )); then
-                  all_done=0
-                  printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "not yet registered (grace ${GRACE_SECONDS}s)"
-                else
-                  resolved[$n]="not-applicable"
-                  printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "absent after grace -> not-applicable (treated as success)"
-                fi
-                ;;
-              queued|in_progress|pending|waiting)
-                all_done=0
-                printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "$state"
-                ;;
-              completed)
-                case "$conclusion" in
-                  success|skipped|neutral)
-                    resolved[$n]="ok ($conclusion)"
-                    printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "$conclusion"
-                    ;;
-                  *)
-                    echo "::error title=Required check failed::${n} concluded with ${conclusion} (${url})"
-                    exit 1
-                    ;;
-                esac
-                ;;
-              *)
-                all_done=0
-                printf '[%4ds] %-40s %s\n' "$elapsed" "$n" "unknown state: ${state}"
-                ;;
-            esac
-          done
-
-          if (( all_done == 1 )); then
-            echo
-            echo "All required checks resolved:"
-            for n in "${names[@]}"; do
-              printf '  %-40s %s\n' "$n" "${resolved[$n]}"
-            done
-            exit 0
-          fi
-
-          if (( elapsed >= MAX_WAIT_SECONDS )); then
-            echo "::error title=Required checks timed out::elapsed ${elapsed}s exceeded max ${MAX_WAIT_SECONDS}s"
-            for n in "${names[@]}"; do
-              printf '  %-40s %s\n' "$n" "${resolved[$n]:-still-pending}"
-            done
-            exit 1
-          fi
-
-          sleep "${POLL_SECONDS}"
-        done
+  using: node24
+  main: index.cjs
