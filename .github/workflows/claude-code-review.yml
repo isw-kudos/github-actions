@@ -50,7 +50,7 @@ jobs:
         # 'claude-review' label — guarantees a fresh verdict even if the diff
         # hash is unchanged.
         if: ${{ !(github.event.action == 'labeled' && github.event.label.name == 'claude-review') }}
-        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .claude-review-verdict
           key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
@@ -176,7 +176,7 @@ jobs:
 
       - name: Save Claude verdict to cache
         if: steps.cache.outputs.cache-hit != 'true' && steps.parse.outputs.verdict != ''
-        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .claude-review-verdict
           key: claude-review-${{ github.event.pull_request.number }}-${{ steps.diff-hash.outputs.hash }}
