@@ -124,6 +124,8 @@ releases/
 
 All configs share the same structure with a `scope` constant. Only commits whose `scope` matches the component's name trigger a release or appear in release notes — all other commits are ignored. They use plain `semantic-release` (not `semantic-release-monorepo`) because the reusable workflows share the `.github/workflows/` directory, which prevents directory-based commit filtering.
 
+**`releaseRules` ordering matters**: the catch-all `{ release: false }` must be the FIRST rule. commit-analyzer lets a later-matching rule override an earlier match, and `release: false` outranks every release type — placed last, it matches every commit and suppresses all releases (this silently disabled every component release between May and August 2026).
+
 ### Release workflows
 
 Each component has a release workflow in `.github/workflows/release-<component>.yml` that:

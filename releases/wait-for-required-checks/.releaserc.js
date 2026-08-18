@@ -8,12 +8,15 @@ module.exports = {
   plugins: [
     ['@semantic-release/commit-analyzer', {
       releaseRules: [
+        // Catch-all must come FIRST: commit-analyzer lets a later-matching
+        // rule override an earlier one, and `release: false` outranks
+        // everything — placed last it suppresses all releases.
+        { release: false },
         { breaking: true, scope, release: 'major' },
         { type: 'feat',  scope, release: 'minor' },
         { type: 'fix',   scope, release: 'patch' },
         { type: 'perf',  scope, release: 'patch' },
         { type: 'chore', scope, release: 'patch' },
-        { release: false },
       ],
     }],
     ['@semantic-release/release-notes-generator', {
