@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Compute PR diff hash
         id: diff-hash
@@ -167,7 +169,10 @@ jobs:
 
       - name: Write verdict file for cache
         if: steps.cache.outputs.cache-hit != 'true' && steps.parse.outputs.verdict != ''
-        run: printf '%s|%s\n' "${{ steps.parse.outputs.verdict }}" "${{ steps.parse.outputs.confidence }}" > .claude-review-verdict
+        env:
+          VERDICT: ${{ steps.parse.outputs.verdict }}
+          CONFIDENCE: ${{ steps.parse.outputs.confidence }}
+        run: printf '%s|%s\n' "$VERDICT" "$CONFIDENCE" > .claude-review-verdict
 
       - name: Save Claude verdict to cache
         if: steps.cache.outputs.cache-hit != 'true' && steps.parse.outputs.verdict != ''
@@ -190,17 +195,22 @@ jobs:
           gh api -X DELETE "repos/${REPO}/issues/${PR_NUMBER}/labels/claude-review" || true
 
       - name: Gate auto-merge on Claude verdict
+        env:
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+          DIFF_HASH: ${{ steps.diff-hash.outputs.hash }}
+          PARSED_VERDICT: ${{ steps.parse.outputs.verdict }}
+          PARSED_CONFIDENCE: ${{ steps.parse.outputs.confidence }}
         run: |
           set -euo pipefail
-          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_HIT" = "true" ]; then
             cached=$(cat .claude-review-verdict)
             verdict="${cached%%|*}"
             confidence="${cached##*|}"
             confidence="${confidence%$'\n'}"
-            echo "::notice::Reusing cached verdict for unchanged diff (hash ${{ steps.diff-hash.outputs.hash }}): $verdict / $confidence"
+            echo "::notice::Reusing cached verdict for unchanged diff (hash $DIFF_HASH): $verdict / $confidence"
           else
-            verdict="${{ steps.parse.outputs.verdict }}"
-            confidence="${{ steps.parse.outputs.confidence }}"
+            verdict="$PARSED_VERDICT"
+            confidence="$PARSED_CONFIDENCE"
             echo "Fresh Claude verdict: $verdict / $confidence"
           fi
           if [ "$verdict" = "BLOCK" ]; then

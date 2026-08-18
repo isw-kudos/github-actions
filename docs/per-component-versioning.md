@@ -146,7 +146,7 @@ pre-commit install --hook-type commit-msg
 | Workflow | Purpose |
 |---|---|
 | `pre-commit.yml` | Runs pre-commit checks on this repo's PRs |
-| `abom.yml` | ABOM supply chain security scan |
+| `zizmor.yml` | Static security audit of workflows/actions |
 | `sync-mirrors.yml` | Syncs branches and tags to ISW-AISP |
 | `release-*.yml` | Per-component release automation |
 

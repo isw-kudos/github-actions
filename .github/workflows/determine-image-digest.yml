@@ -42,9 +42,9 @@ jobs:
         id: resolve_digest
         env:
           IMAGE_TAG: ${{ steps.meta.outputs.version }}
+          REPOSITORY_NAME: ${{ vars.ECR_REPOSITORY }}
         run: |
           # Attempt to find the most recent image digest for the branch
-          REPOSITORY_NAME="${{ vars.ECR_REPOSITORY }}"
 
           # Fetch the most recent image digest for the branch
           DIGEST=$(aws ecr describe-images \

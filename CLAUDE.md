@@ -85,6 +85,17 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |
 | `sync-mirrors.yml` | Mirror repo to consumer orgs (matrix: `ISW-AISP`, `isw-kudos`) on every push |
+| `zizmor.yml` | Static security audit of all workflows/actions (zizmor); fails CI on findings |
+
+### Workflow Security
+
+GitHub Actions workflows are validated by zizmor at three layers, all pinned to the same CLI version (Renovate bumps all three):
+
+1. **CI** — `.github/workflows/zizmor.yml` runs on every `.github/workflows/**` / `.github/actions/**` change and on push to `main` (`persona: regular`, fails on findings).
+2. **pre-commit** — the `zizmor` hook in `.pre-commit-config.yaml` audits staged workflow files (offline, regular persona).
+3. **Claude hook** — `.claude/hooks/zizmor-check.sh` (PostToolUse) re-audits any workflow file Claude edits.
+
+Load the `gha-security` skill (`.claude/skills/gha-security/SKILL.md`) before creating or editing anything under `.github/workflows/` or `.github/actions/` — it covers SHA pinning, trigger selection, least-privilege permissions (including `permission-*` inputs on `create-github-app-token`), and the env-var indirection rule for `run:` blocks. Never fix a zizmor failure by silencing it; fix the workflow or add a justified `# zizmor: ignore[rule]` comment.
 
 ### ecs-deploy Rollback Flow
 

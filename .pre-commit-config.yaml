@@ -17,6 +17,13 @@ repos:
     hooks:
       - id: renovate-config-validator
         args: [--strict]
+  # Workflow security audit — offline + regular persona to match CI's gate;
+  # the zizmor.yml workflow runs the full online pass on the PR.
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.29.0
+    hooks:
+      - id: zizmor
+        args: [--persona, regular, --offline]
   - repo: local
     hooks:
       - id: component-scope-check

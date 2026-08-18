@@ -39,6 +39,7 @@ jobs:
           private-key: ${{ secrets.DEVOPS_ISW_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: github-actions
+          permission-contents: read
 
       - name: Checkout Actions Repo
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -47,6 +48,7 @@ jobs:
           ref: main
           repository: ${{ github.repository_owner }}/github-actions
           token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
@@ -57,30 +59,37 @@ jobs:
 
       - name: Save Current Image Digest in case of Failure
         id: save-digest
+        env:
+          SSM_PARAMETER_NAME: ${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}
         run: |
           current_digest=$(aws ssm get-parameter \
-            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
+            --name "$SSM_PARAMETER_NAME" \
             --query "Parameter.Value" \
             --output text)
 
           aws ssm put-parameter \
-            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}_last_known_working" \
+            --name "${SSM_PARAMETER_NAME}_last_known_working" \
             --type "String" \
             --value "$current_digest" \
             --overwrite
 
       - name: Push Image Digest to SSM
+        env:
+          SSM_PARAMETER_NAME: ${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
         run: |
           aws ssm put-parameter \
-            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
+            --name "$SSM_PARAMETER_NAME" \
             --type "String" \
-            --value "${{ inputs.image_digest }}" \
+            --value "$IMAGE_DIGEST" \
             --overwrite
 
       - name: Download Current Task definition
+        env:
+          SERVICE_NAME: ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }}
         run: |
           aws ecs describe-task-definition \
-          --task-definition ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }} \
+          --task-definition "$SERVICE_NAME" \
           --query taskDefinition > task-definition.json
 
       - name: Update Image Digest in Task Definition
@@ -115,10 +124,10 @@ jobs:
 
       - name: Validate Deployment Success
         id: validate-deployment
+        env:
+          SUCCESS: ${{ steps.check-deployment.outputs.success }}
+          ROLLOUT_STATE: ${{ steps.check-deployment.outputs.rollout-state }}
         run: |
-          SUCCESS="${{ steps.check-deployment.outputs.success }}"
-          ROLLOUT_STATE="${{ steps.check-deployment.outputs.rollout-state }}"
-
           echo "Deployment Status:"
           echo "  Success: $SUCCESS"
           echo "  Rollout State: $ROLLOUT_STATE"
@@ -139,14 +148,16 @@ jobs:
             steps.check-deployment.outcome == 'failure' ||
             steps.validate-deployment.outcome == 'failure'
           )
+        env:
+          SSM_PARAMETER_NAME: ${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}
         run: |
           last_known_working=$(aws ssm get-parameter \
-            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}_last_known_working" \
+            --name "${SSM_PARAMETER_NAME}_last_known_working" \
             --query "Parameter.Value" \
             --output text)
 
           aws ssm put-parameter \
-            --name "${{ inputs.ssm_parameter_name != null && inputs.ssm_parameter_name || vars.SSM_PARAMETER_NAME }}" \
+            --name "$SSM_PARAMETER_NAME" \
             --type "String" \
             --value "$last_known_working" \
             --overwrite
