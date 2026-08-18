@@ -128,9 +128,12 @@ All configs share the same structure with a `scope` constant. Only commits whose
 
 Each component has a release workflow in `.github/workflows/release-<component>.yml` that:
 
-1. Triggers on push to `main` with a `paths:` filter scoped to the component's files
-2. Runs `npx semantic-release` from the component's `releases/<component>/` directory
-3. Creates a git tag and GitHub Release via `@semantic-release/github`
+1. Triggers on push to `main` with a `paths:` filter scoped to the component's files (plus `workflow_dispatch` for manual catch-up runs)
+2. Checks out the tip of `main` (`ref: main`), not the push SHA — semantic-release refuses to publish from a commit that is behind the remote branch ("The local branch main is behind the remote one"), which would silently drop a release whenever two PRs merge back-to-back
+3. Runs `npx semantic-release` from the component's `releases/<component>/` directory
+4. Creates a git tag and GitHub Release via `@semantic-release/github`
+
+If a release was still skipped by a race (a push landed between checkout and semantic-release), trigger the component's release workflow manually via `workflow_dispatch` — it analyses the tip of `main` and releases any unreleased scoped commits.
 
 ### Commit-msg hook
 

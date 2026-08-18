@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/ecs-deploy.yml'
       - '.github/actions/ecs-query/**'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
@@ -36,6 +37,7 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           fetch-depth: 0
           persist-credentials: true
           token: ${{ steps.app-token.outputs.token }}

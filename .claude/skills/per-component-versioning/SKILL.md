@@ -75,3 +75,4 @@ If a change merged but no release fired:
 2. Check the commit message uses the correct component scope (e.g. `fix(docker-build): ...`) — commits without a matching scope are ignored by the analyzer.
 3. Check the release workflow run on the commit — semantic-release logs say "no relevant changes" when nothing in the analysed range warrants a bump.
 4. For Renovate PRs: confirm the right `packageRules` scope rule matched (look at the PR commit subject — should be `chore(<component>): ...`; bare `chore(deps)` means the scope rule didn't match).
+5. Check the semantic-release log for "The local branch main is behind the remote one" — a push landed on `main` while the run was in flight. Release workflows check out `ref: main` (branch tip, not the push SHA) to make this rare; if it still happens, re-run via `workflow_dispatch` to release the missed commit.
