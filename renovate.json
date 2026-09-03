@@ -124,6 +124,14 @@
       "semanticCommitType": "chore",
       "semanticCommitScope": "turbo-repo-cache",
       "commitMessageSuffix": ""
+    },
+    {
+      "description": "Zizmor - keep the pinned CLI version and the zizmor-action release moving together in ONE PR, gated behind Dependency Dashboard approval and never automerged. zizmor-action ships a support/versions allowlist mapping each exact CLI version to a vetted image digest; its action.sh dies with 'Unknown version' when the version: input is not in the allowlist bundled by the SHA-pinned action release, and the zizmor CLI publishes ahead of the action. Grouping the CLI dep with the action dep makes Renovate propose both in a single branch. See ISW-Cloud42/github-actions .github/workflows/zizmor.yml.",
+      "groupName": "Zizmor",
+      "matchPackageNames": ["zizmorcore/zizmor", "zizmorcore/zizmor-action"],
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": "Security tooling"
     }
   ],
   "pre-commit": {
