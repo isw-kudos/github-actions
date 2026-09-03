@@ -73,8 +73,8 @@ def sample_deployments():
     """Sample deployment data from list_service_deployments"""
     return [
         {
-            'arn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-deployment/my-cluster/my-service/deployment-1',
-            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
+            'arn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-deployment/my-cluster/my-service/deployment-1',
+            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
             'status': 'ACTIVE',
             'rolloutState': 'COMPLETED',
             'statusReason': 'Deployment completed successfully',
@@ -83,13 +83,13 @@ def sample_deployments():
             'deployedAndRunningCount': 2,
             'deployedCount': 2,
             'failedTasks': 0,
-            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-revision/my-cluster/my-service/9357477342526499124',
+            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-revision/my-cluster/my-service/9357477342526499124',
             'createdAt': datetime(2025, 11, 30, 22, 18, 55),
             'updatedAt': datetime(2025, 11, 30, 22, 21, 41),
         },
         {
-            'arn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-deployment/my-cluster/my-service/deployment-2',
-            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:99',
+            'arn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-deployment/my-cluster/my-service/deployment-2',
+            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:99',
             'status': 'ACTIVE',
             'rolloutState': 'IN_PROGRESS',
             'statusReason': 'Deployment in progress',
@@ -98,13 +98,13 @@ def sample_deployments():
             'deployedAndRunningCount': 1,
             'deployedCount': 2,
             'failedTasks': 0,
-            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-revision/my-cluster/my-service/1234567890123456789',
+            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-revision/my-cluster/my-service/1234567890123456789',
             'createdAt': datetime(2025, 11, 30, 22, 10, 0),
             'updatedAt': datetime(2025, 11, 30, 22, 15, 0),
         },
         {
-            'arn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-deployment/my-cluster/my-service/deployment-3',
-            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:98',
+            'arn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-deployment/my-cluster/my-service/deployment-3',
+            'taskDefinition': 'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:98',
             'status': 'ACTIVE',
             'rolloutState': 'ROLLED_BACK',
             'statusReason': 'Deployment rolled back due to service failures',
@@ -113,7 +113,7 @@ def sample_deployments():
             'deployedAndRunningCount': 2,
             'deployedCount': 2,
             'failedTasks': 0,
-            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:872515295541:service-revision/my-cluster/my-service/9876543210987654321',
+            'targetServiceRevisionArn': 'arn:aws:ecs:ap-southeast-2:123456789012:service-revision/my-cluster/my-service/9876543210987654321',
             'createdAt': datetime(2025, 11, 30, 21, 0, 0),
             'updatedAt': datetime(2025, 11, 30, 21, 5, 0),
         },
@@ -140,7 +140,7 @@ def test_check_deployment_status_success(mock_ecs_client, sample_deployments):
     assert result['status'] == 'ACTIVE'
     assert result['desiredCount'] == 2
     assert result['runningCount'] == 2
-    assert result['deploymentArn'] == 'arn:aws:ecs:ap-southeast-2:872515295541:service-deployment/my-cluster/my-service/deployment-1'
+    assert result['deploymentArn'] == 'arn:aws:ecs:ap-southeast-2:123456789012:service-deployment/my-cluster/my-service/deployment-1'
 
 
 def test_check_deployment_status_in_progress(mock_ecs_client, sample_deployments):
@@ -210,7 +210,7 @@ def test_check_deployment_status_by_arn(mock_ecs_client, sample_deployments):
         mock_ecs_client,
         cluster='my-cluster',
         service='my-service',
-        target_task_definition='arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
+        target_task_definition='arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
         expected_status='COMPLETED'
     )
 
@@ -221,7 +221,7 @@ def test_check_deployment_status_by_arn(mock_ecs_client, sample_deployments):
 def test_task_def_matches_exact_revision():
     """Test task definition matching with exact revision"""
     assert _task_def_matches(
-        'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
+        'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
         'my-service:100'
     ) is True
 
@@ -229,15 +229,15 @@ def test_task_def_matches_exact_revision():
 def test_task_def_matches_full_arn():
     """Test task definition matching with full ARN"""
     assert _task_def_matches(
-        'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
-        'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100'
+        'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
+        'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100'
     ) is True
 
 
 def test_task_def_matches_family_only():
     """Test task definition matching by family only"""
     assert _task_def_matches(
-        'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
+        'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
         'my-service'
     ) is True
 
@@ -245,7 +245,7 @@ def test_task_def_matches_family_only():
 def test_task_def_matches_no_match():
     """Test task definition matching with no match"""
     assert _task_def_matches(
-        'arn:aws:ecs:ap-southeast-2:872515295541:task-definition/my-service:100',
+        'arn:aws:ecs:ap-southeast-2:123456789012:task-definition/my-service:100',
         'other-service:100'
     ) is False
 
