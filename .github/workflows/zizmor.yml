@@ -37,6 +37,6 @@ jobs:
         uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
         with:
           # renovate: datasource=github-releases depName=zizmorcore/zizmor extractVersion=^v(?<version>.*)$
-          version: 1.29.0 # pin the CLI; do not track "latest"
+          version: 1.30.0 # pin the CLI; do not track "latest"
           advanced-security: false # annotations + fail CI; no GHAS/SARIF
           persona: regular

@@ -113,7 +113,7 @@ jobs:
 
       - name: Check Deployment Status
         id: check-deployment
-        uses: ./actions/.github/actions/ecs-query
+        uses: ./actions/.github/actions/ecs-query # zizmor: ignore[self-repository] intentional: resolved from the app-token checkout of the mirror at ref:main (see "Checkout Actions Repo" above); a $/ self-repository ref would change the version+auth contract for cross-org consumers, so it is deferred to a dedicated PR
         with:
           query-type: check-deployment
           service: ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }}
