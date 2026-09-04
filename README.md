@@ -7,23 +7,6 @@ This repository contains reusable GitHub Actions for CI/CD, infrastructure autom
 - **Consistency** – Ensures uniform CI/CD practices across projects.
 - **Maintainability** – Updates to actions propagate to all using repositories.
 
-## 🪞 Mirroring Model
-
-GitHub Actions cannot be consumed from private repositories outside the owning organization. To work around this, this canonical repository (`ISW-Cloud42/github-actions`) is automatically mirrored to each consuming organization by the [`sync-mirrors.yml`](.github/workflows/sync-mirrors.yml) workflow on every push.
-
-Currently mirrored to:
-- `ISW-AISP/github-actions`
-- `isw-kudos/github-actions`
-
-**Consumers must reference the mirror in their own organization, not this canonical repo.** Replace `<org>` in the examples below with your organization's name (e.g. `ISW-AISP`, `isw-kudos`).
-
-> ⚠️ **Do not commit directly to a mirror repo.** Mirrors are read-only by design — the `sync-mirrors.yml` workflow runs on every push to the canonical `ISW-Cloud42/github-actions` repo and force-pushes all branches and tags with `--prune`. Any commits, branches, or tags pushed directly to a mirror **will be overwritten or deleted** on the next sync. All changes must be made in `ISW-Cloud42/github-actions` and will propagate from there.
-
-To add a new org as a mirror target:
-1. Install the `devops-isw` GitHub App in the new org with access to a `github-actions` repository.
-2. Create the empty `github-actions` repository in that org.
-3. Add the org to the matrix in [`.github/workflows/sync-mirrors.yml`](.github/workflows/sync-mirrors.yml).
-
 ## 🏷️ Versioning & Releases
 
 Each reusable workflow/action is an independently versioned **component** with its own semver tag prefix (e.g. `docker-build-v1.2.3`, `ecs-deploy-v1.2.3`). This means consumers only see updates when the specific component they use actually changes.
@@ -42,13 +25,13 @@ Bump rules:
 | `feat:` | Minor | `feat(ecs-deploy): add rollback timeout parameter` |
 | `fix:` / `perf:` / `chore(deps):` | Patch | `fix(tofu-pre-commit): pin trivy version` |
 
-Tags are pushed to all mirror orgs by `sync-mirrors.yml`, so consumers referencing `<org>/github-actions@<component>-vX.Y.Z` get the same versions as the canonical repo. Full details, Renovate config for consumers, and the steps to add a new component are in [Per-Component Versioning](docs/per-component-versioning.md).
+Every component version is published as a GitHub Release. Full details, Renovate config for consumers, and the steps to add a new component are in [Per-Component Versioning](docs/per-component-versioning.md).
 
 ## 🚀 Usage
 
 ### Reusable Workflows
 
-Pin to a component tag (not `@main` or a commit SHA). Each example below uses the component's tag prefix.
+Pin each `uses:` to a full commit SHA (shown below as `<dummy hash>`) rather than a tag or `@main`. Replace `<dummy hash>` with the commit SHA of the [release](../../releases) you want — each component is released under its own tag prefix (e.g. `docker-build-v1.2.3`), and the release page shows the matching SHA.
 
 #### docker-build
 A comprehensive Docker build workflow with ECR integration.
@@ -56,7 +39,7 @@ A comprehensive Docker build workflow with ECR integration.
 ```yaml
 jobs:
   build:
-    uses: <org>/github-actions/.github/workflows/docker-build.yml@docker-build-v1.0.0
+    uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<dummy hash>
     with:
       environment: production
       architecture: linux/amd64
@@ -70,7 +53,7 @@ Deploys applications to Amazon ECS with automatic rollback on failure.
 ```yaml
 jobs:
   deploy:
-    uses: <org>/github-actions/.github/workflows/ecs-deploy.yml@ecs-deploy-v1.0.0
+    uses: isw-kudos/github-actions/.github/workflows/ecs-deploy.yml@<dummy hash>
     with:
       environment: production
       cluster_name: my-cluster
@@ -86,7 +69,7 @@ A comprehensive pre-commit workflow with OpenTofu/Terraform tooling including Go
 ```yaml
 jobs:
   pre-commit:
-    uses: <org>/github-actions/.github/workflows/tofu-pre-commit.yml@tofu-pre-commit-v1.0.0
+    uses: isw-kudos/github-actions/.github/workflows/tofu-pre-commit.yml@<dummy hash>
 ```
 
 #### determine-image-digest
@@ -95,7 +78,7 @@ Resolves the ECR image digest for a given tag.
 ```yaml
 jobs:
   digest:
-    uses: <org>/github-actions/.github/workflows/determine-image-digest.yml@determine-image-digest-v1.0.0
+    uses: isw-kudos/github-actions/.github/workflows/determine-image-digest.yml@<dummy hash>
 ```
 
 #### turbo-repo-cache
@@ -103,7 +86,7 @@ Composite action. Authenticates to GCP via OIDC and starts a local Turborepo rem
 
 ```yaml
 steps:
-  - uses: <org>/github-actions/.github/actions/turbo-repo-cache@turbo-repo-cache-v1.0.0
+  - uses: isw-kudos/github-actions/.github/actions/turbo-repo-cache@<dummy hash>
     with:
       workload-identity-provider: projects/123/locations/global/workloadIdentityPools/POOL/providers/PROVIDER
       service-account: my-sa@my-project.iam.gserviceaccount.com
