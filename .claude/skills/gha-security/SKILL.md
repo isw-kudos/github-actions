@@ -3,7 +3,7 @@ name: gha-security
 description: Security rules for GitHub Actions workflows. Use when creating or editing any file under .github/workflows/ or .github/actions/, or when a zizmor finding needs fixing.
 ---
 
-Apply every rule below when authoring or editing a workflow. This repo is the **canonical source of reusable workflows** consumed by other orgs (via mirrors) — a security defect here propagates to every consumer. Never relax a rule to make CI pass; fix the workflow.
+Apply every rule below when authoring or editing a workflow. This repo is the **canonical source of reusable workflows** consumed by other orgs (via the public `isw-kudos/github-actions` repo) — a security defect here propagates to every consumer. Never relax a rule to make CI pass; fix the workflow.
 
 ## 1. Pin every action to a full commit SHA
 
@@ -57,7 +57,7 @@ jobs:
 ```
 Never use blanket `permissions: write-all`. A workflow with no `permissions:` block at all gets the repo default token — zizmor flags this (`excessive-permissions`).
 
-**GitHub App tokens too**: every `actions/create-github-app-token` step must scope the token with `permission-<name>` inputs (e.g. `permission-contents: write`) — otherwise it inherits the app's blanket installation permissions (zizmor `github-app`, High). Note: a token that pushes `.github/workflows/**` changes also needs `permission-workflows: write` (see `sync-mirrors.yml`).
+**GitHub App tokens too**: every `actions/create-github-app-token` step must scope the token with `permission-<name>` inputs (e.g. `permission-contents: write`) — otherwise it inherits the app's blanket installation permissions (zizmor `github-app`, High). Note: a token that pushes `.github/workflows/**` changes also needs `permission-workflows: write`.
 
 ## 4. Prevent injection from untrusted input
 

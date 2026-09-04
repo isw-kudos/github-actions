@@ -75,7 +75,7 @@ Pin to a component tag instead of a commit SHA or `@main`:
 
 ```yaml
 # Recommended: pin to a component tag
-uses: ISW-AISP/github-actions/.github/workflows/docker-build.yml@docker-build-v1.2.3
+uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@docker-build-v1.2.3
 
 # Or via ISW-Cloud42 directly
 uses: ISW-Cloud42/github-actions/.github/workflows/tofu-pre-commit.yml@tofu-pre-commit-v1.0.0
@@ -89,12 +89,12 @@ Add `extractVersion` rules so Renovate tracks the correct tag pattern per workfl
 {
   "packageRules": [
     {
-      "matchDepNames": ["ISW-AISP/github-actions"],
+      "matchDepNames": ["isw-kudos/github-actions"],
       "matchFileNames": [".github/workflows/build.yml"],
       "extractVersion": "^docker-build-v(?<version>.*)$"
     },
     {
-      "matchDepNames": ["ISW-AISP/github-actions"],
+      "matchDepNames": ["isw-kudos/github-actions"],
       "matchFileNames": [".github/workflows/deploy.yml"],
       "extractVersion": "^ecs-deploy-v(?<version>.*)$"
     }
@@ -103,10 +103,6 @@ Add `extractVersion` rules so Renovate tracks the correct tag pattern per workfl
 ```
 
 Adjust `matchFileNames` to match the actual workflow file in the consuming repo that references the shared workflow.
-
-## Mirror sync
-
-Tags are automatically pushed to the `ISW-AISP/github-actions` mirror via `sync-mirrors.yml`. Consumers referencing `ISW-AISP/github-actions` will see the same tags as `ISW-Cloud42/github-actions`.
 
 ## Architecture
 
@@ -152,7 +148,6 @@ pre-commit install --hook-type commit-msg
 |---|---|
 | `pre-commit.yml` | Runs pre-commit checks on this repo's PRs |
 | `zizmor.yml` | Static security audit of workflows/actions |
-| `sync-mirrors.yml` | Syncs branches and tags to ISW-AISP |
 | `release-*.yml` | Per-component release automation |
 
 ### Renovate scoping in this repo

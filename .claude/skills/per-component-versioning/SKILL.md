@@ -24,7 +24,6 @@ Tag prefix convention is `<component>-v`. Watched paths must match the release w
 - Release workflow runs `npx semantic-release` from `releases/<component>/` (each has its own `.releaserc.js` with a `scope` constant that gates which commits trigger a release and appear in release notes).
 - Plain `semantic-release` is used (not `semantic-release-monorepo`) because reusable workflows share `.github/workflows/`, which prevents directory-based commit filtering.
 - `@semantic-release/github` creates the git tag and GitHub Release.
-- Tags are pushed to all mirror orgs by `sync-mirrors.yml` so consumers in any mirror org see the same versions.
 
 ## Conventional Commit bump rules
 
