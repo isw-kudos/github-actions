@@ -7,10 +7,15 @@ on:
         description: "The image digest"
         value: ${{ jobs.determine_image_digest.outputs.image_digest }}
 
+permissions: {}
+
 jobs:
   determine_image_digest:
     name: Get Image Digest
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # read the calling repo's context
+      id-token: write # OIDC federation for aws-actions/configure-aws-credentials
     outputs:
       image_digest: ${{ steps.resolve_digest.outputs.image_digest }}
     steps:
