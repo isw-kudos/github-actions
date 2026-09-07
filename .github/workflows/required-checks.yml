@@ -3,8 +3,10 @@
 # deadlock PRs they skip. The action polls the Checks API; absent-after-grace =
 # not applicable.
 #
-# pull_request_target loads the workflow and action from the BASE branch so a
-# PR cannot neuter the gate. Never check out or run PR code here.
+# pull_request_target runs the workflow from the BASE branch, and the `$/`
+# self-repository ref loads the gate action from that same base commit (no
+# checkout, immune to runtime filesystem state) so a PR cannot neuter the gate.
+# Never check out or run PR code here.
 name: Required Checks
 
 on:
@@ -24,18 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
-      checks: read
+      contents: read # $/ loads the in-repo gate action at the base commit
+      checks: read # the action polls the Checks API for the required contexts
     steps:
-      - name: Checkout base branch (gate action only)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          sparse-checkout: .github/actions/wait-for-required-checks
-          sparse-checkout-cone-mode: false
-
       - name: Wait for required checks
-        uses: ./.github/actions/wait-for-required-checks
+        uses: $/.github/actions/wait-for-required-checks
         with:
           required-checks: |
             Run Pre-commit Checks
