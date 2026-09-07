@@ -103,6 +103,12 @@ on:
 Use `paths-ignore` to skip runs that can't affect the build, with a re-include
 so the workflow re-runs when its own file changes. Gate jobs on non-draft PRs.
 
+**Exception:** never draft-gate a workflow whose check is listed in a
+`wait-for-required-checks` aggregation gate (`required-checks.yml`). The gate
+treats `skipped` as a pass and is not re-triggered by `ready_for_review`, so a
+draft-gated required check lets the PR merge without that check ever running.
+See `.github/actions/wait-for-required-checks/README.md`.
+
 ```yaml
 on:
   pull_request:

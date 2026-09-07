@@ -32,6 +32,10 @@ jobs:
       - name: Wait for required checks
         uses: $/.github/actions/wait-for-required-checks
         with:
+          # Every check listed here MUST run on draft PRs. `skipped` and
+          # "absent after grace" both count as a pass, and ready_for_review
+          # does not re-trigger this gate, so a draft-gated check would let a
+          # PR merge with that check never having executed.
           required-checks: |
             Run Pre-commit Checks
             Audit workflows

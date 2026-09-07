@@ -96,6 +96,21 @@ For each required check, the action picks the most recent matching check-run
 | `completed` + `failure` / `cancelled` / `timed_out` / `action_required` | gate fails immediately, naming the failed check |
 | Total elapsed > `max-wait-seconds` | gate fails with a timeout error |
 
+### Listed checks must run on draft PRs
+
+Because `skipped` and "absent after grace" both resolve as success, the gate is
+only as strong as the source workflows' willingness to run. A source workflow
+gated with `if: github.event.pull_request.draft == false` registers a `skipped`
+run on a draft PR, the gate passes for that head SHA, and `ready_for_review` is
+not a default `pull_request_target` activity type -- so nothing re-evaluates
+when the PR is marked ready. Adding `ready_for_review` to the gate's `types:`
+does not close this either: the gate polls immediately and the latest run on the
+SHA is still the completed `skipped` one.
+
+**Do not draft-gate (or otherwise conditionally skip) any workflow whose check
+is listed in `required-checks`.** Path filters on the source workflow's `on:`
+are fine -- that is the not-applicable case this action exists to handle.
+
 ## Testing
 
 `index.cjs` exports its pure helpers (`parseNames`, `latestFor`,
