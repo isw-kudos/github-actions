@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: ISW-AISP/github-actions/.github/actions/wait-for-required-checks@wait-for-required-checks-v1.0.0
+      - uses: isw-kudos/github-actions/.github/actions/wait-for-required-checks@wait-for-required-checks-v1.0.0
         with:
           required-checks: |
             Lint, Type Check & Test

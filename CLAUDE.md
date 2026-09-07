@@ -4,19 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is `ISW-Cloud42/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`).
-
-### Mirror/Sync Model
-
-GitHub Actions cannot be consumed across organization boundaries when the source repo is private. This repo is therefore mirrored on every push to each consuming org by `.github/workflows/sync-mirrors.yml`. Consumers reference the mirror in their own org, e.g. `uses: <org>/github-actions/.github/workflows/docker-build.yml@docker-build-v1.0.0`.
-
-Current mirror targets (matrix in `sync-mirrors.yml`):
-- `ISW-AISP/github-actions`
-- `isw-kudos/github-actions`
-
-The sync uses the `devops-isw` GitHub App (`vars.DEVOPS_ISW_APP_ID` / `secrets.DEVOPS_ISW_APP_PRIVATE_KEY`); the same app must be installed in any new target org with access to a `github-actions` repo. Sync is force-push with `--prune` and pushes all branches and tags.
-
-When adding a new mirror org: install the app, create the empty `github-actions` repo in the org, then add the org to the matrix. Update `README.md` mirror list too.
+This is `ISW-Cloud42/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`). Dev happens here; `isw-kudos/github-actions` is the public repo consumers reference.
 
 ## Commands
 
@@ -84,7 +72,6 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |
-| `sync-mirrors.yml` | Mirror repo to consumer orgs (matrix: `ISW-AISP`, `isw-kudos`) on every push |
 | `zizmor.yml` | Static security audit of all workflows/actions (zizmor); fails CI on findings |
 
 ### Workflow Security
