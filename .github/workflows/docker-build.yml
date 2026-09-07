@@ -32,6 +32,8 @@ on:
         description: The image digest
         value: ${{ jobs.build_push.outputs.digest }}
 
+permissions: {}
+
 env:
   branch: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
 
@@ -39,6 +41,9 @@ jobs:
   build_push:
     name: Build & Push
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # read the calling repo's context
+      id-token: write # OIDC federation for aws-actions/configure-aws-credentials
     outputs:
       digest: ${{ steps.build_and_push.outputs.digest }}
     steps:
