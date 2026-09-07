@@ -25,6 +25,19 @@
       ],
       "depNameTemplate": "terraform-docs/terraform-docs",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the pinned zizmor CLI version in the Claude PostToolUse hook as zizmorcore/zizmor, so it lands in the Zizmor group and moves in lockstep with the zizmor.yml `version:` pin and the zizmor-action release. Without this the hook version drifts and audits with a different CLI than CI. See .claude/hooks/zizmor-check.sh.",
+      "managerFilePatterns": [
+        "/^\\.claude/hooks/zizmor-check\\.sh$/"
+      ],
+      "matchStrings": [
+        "ZIZMOR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "zizmorcore/zizmor",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.+)$"
     }
   ],
   "packageRules": [

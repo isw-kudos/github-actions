@@ -14,12 +14,20 @@ esac
 
 [ -f "$FILE" ] || exit 0
 
-if command -v zizmor >/dev/null 2>&1; then
+# Pinned CLI version. Renovate bumps this in lockstep with the zizmor.yml
+# `version:` input and the zizmor-action release (the "Zizmor" group in
+# renovate.json), so the hook always audits with the same CLI as CI.
+ZIZMOR_VERSION=1.30.0
+
+# Only use a system zizmor if it is the pinned version; otherwise fetch the
+# pin via uvx so a stale local install can't audit with a different CLI.
+if command -v zizmor >/dev/null 2>&1 &&
+  [ "$(zizmor --version 2>/dev/null | awk 'NR==1 {print $NF}')" = "$ZIZMOR_VERSION" ]; then
   set -- zizmor
 elif command -v uvx >/dev/null 2>&1; then
-  set -- uvx zizmor@1.29.0
+  set -- uvx "zizmor@$ZIZMOR_VERSION"
 else
-  # No runner available — pre-commit and CI still enforce.
+  # No matching runner available — pre-commit and CI still enforce.
   exit 0
 fi
 
