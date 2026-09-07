@@ -3,15 +3,17 @@ name: Claude Code Review
 on:
   workflow_call:
 
+permissions: {}
+
 jobs:
   claude-review:
     name: Claude Code Review
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-      id-token: write
+      contents: read # checkout + read PR files/comments via gh api
+      pull-requests: write # post/delete the sticky review comment
+      issues: write # manage the 'claude-review' trigger label
+      id-token: write # OIDC token exchange for the Anthropic access token
 
     steps:
       - name: Checkout repository
