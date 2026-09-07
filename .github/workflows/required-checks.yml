@@ -35,4 +35,3 @@ jobs:
           required-checks: |
             Run Pre-commit Checks
             Audit workflows
-          grace-seconds: "150"
