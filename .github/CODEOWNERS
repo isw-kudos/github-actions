@@ -1,0 +1,16 @@
+# Code owners for isw-kudos/github-actions.
+#
+# This repo is the canonical, public source of reusable workflows/actions
+# consumed cross-org, so any change under .github/ (workflow definitions, the
+# actions they call, and this file itself) must be reviewed by an admin team.
+# CODEOWNERS only *requests* the review; the default-branch ruleset
+# (require_code_owner_review) is what blocks the merge. The owning team must
+# have write access or GitHub silently ignores these lines.
+#
+# Last match wins — keep the CODEOWNERS line last so a broader pattern can't
+# take over ownership of this file.
+
+/.github/                 @isw-kudos/huddo-codeowners
+/.github/workflows/       @isw-kudos/huddo-codeowners
+/.github/actions/         @isw-kudos/huddo-codeowners
+/.github/CODEOWNERS        @isw-kudos/huddo-codeowners
