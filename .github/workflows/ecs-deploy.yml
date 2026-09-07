@@ -33,28 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     permissions:
-      contents: read # checkout of the actions repo (via app token)
       id-token: write # OIDC federation for aws-actions/configure-aws-credentials
     steps:
-      - name: Generate App Token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-token
-        with:
-          client-id: ${{ vars.HUDDO_DEVOPS_GITHUB_APP_ID }}
-          private-key: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: github-actions
-          permission-contents: read
-
-      - name: Checkout Actions Repo
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: actions
-          ref: main
-          repository: ${{ github.repository_owner }}/github-actions
-          token: ${{ steps.app-token.outputs.token }}
-          persist-credentials: false
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
@@ -118,7 +98,7 @@ jobs:
 
       - name: Check Deployment Status
         id: check-deployment
-        uses: ./actions/.github/actions/ecs-query # zizmor: ignore[self-repository] intentional: resolved from the app-token checkout of the mirror at ref:main (see "Checkout Actions Repo" above); a $/ self-repository ref would change the version+auth contract for cross-org consumers, so it is deferred to a dedicated PR
+        uses: $/.github/actions/ecs-query # self-repository ref: ecs-query from this repo at the exact commit ecs-deploy is running (needs runner >= 2.336.0)
         with:
           query-type: check-deployment
           service: ${{ inputs.service_name != null && inputs.service_name || vars.SERVICE_NAME }}
