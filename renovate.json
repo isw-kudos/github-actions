@@ -153,6 +153,11 @@
       "automerge": false,
       "dependencyDashboardApproval": true,
       "dependencyDashboardCategory": "Security tooling"
+    },
+    {
+      "description": "Disable digest pinning for the two VIRTUAL deps the github-actions manager derives from setup-trivy / zizmor-action `version:` inputs. These are CLI version strings, not uses:/image: refs, so there is no digest-pinnable literal in the workflow - pinDigests just fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). The real SHA-pinned action refs (aquasecurity/setup-trivy, zizmorcore/zizmor-action) are separate uses: lines, unaffected by this and still pinned. Must stay AFTER the github-actions manager rule that sets pinDigests:true so this override wins.",
+      "matchPackageNames": ["aquasecurity/trivy", "ghcr.io/zizmorcore/zizmor"],
+      "pinDigests": false
     }
   ],
   "pre-commit": {
