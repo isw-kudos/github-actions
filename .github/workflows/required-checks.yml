@@ -1,0 +1,38 @@
+# Aggregation gate: the branch ruleset requires this single context instead of
+# the individual (paths-filtered / conditionally-run) checks, which would
+# deadlock PRs they skip. The action polls the Checks API; absent-after-grace =
+# not applicable.
+#
+# pull_request_target runs the workflow from the BASE branch, and the `$/`
+# self-repository ref loads the gate action from that same base commit (no
+# checkout, immune to runtime filesystem state) so a PR cannot neuter the gate.
+# Never check out or run PR code here.
+name: Required Checks
+
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] base-branch gate; no PR code executed
+    branches:
+      - main
+
+concurrency:
+  group: required-checks-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  required-checks:
+    name: Required Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read # $/ loads the in-repo gate action at the base commit
+      checks: read # the action polls the Checks API for the required contexts
+    steps:
+      - name: Wait for required checks
+        uses: $/.github/actions/wait-for-required-checks
+        with:
+          required-checks: |
+            Run Pre-commit Checks
+            Audit workflows
+          grace-seconds: "150"
