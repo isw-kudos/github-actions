@@ -113,3 +113,18 @@ All AWS access uses OIDC (no long-lived credentials). Workflows assume an IAM ro
 ### Python Version
 
 Python `3.14.3` (specified in `.python-version`). Dependencies are pinned in `.github/actions/ecs-query/requirements.txt` and updated automatically by Renovate (minor/patch auto-merged after 3-day minimum age).
+
+<!-- BEGIN ISW AGENT STANDARDS (managed by import.mjs) -->
+## ISW Agent Standards
+
+Imported modules: agent-workflow, universal-code, code-minimalism, ci-github.
+
+Before editing a file, consult the rules in `.claude/rules/` whose frontmatter
+`paths:` globs match that file (rules with no `paths:` are always in effect).
+Use the skills in `.claude/skills/` (git, commit, branch, pr, plan, …) for their tasks.
+
+Update or re-sync these standards with:
+```
+node <path-to>/agent-standards/tools/import.mjs --update
+```
+<!-- END ISW AGENT STANDARDS -->

@@ -1,0 +1,31 @@
+{
+  "name": "agent-standards",
+  "version": "0.1.0",
+  "schema": 1,
+  "source": {
+    "repo": "isw-kudos/agent-standards",
+    "path": "/private/tmp/claude-466497403/-Users-shattrell/0e93e37c-da7c-4d6b-a0bf-664d367531ff/scratchpad/agent-standards"
+  },
+  "importedAt": "2026-09-07T06:55:34.609Z",
+  "agents": [
+    "claude"
+  ],
+  "modules": [
+    {
+      "id": "agent-workflow",
+      "version": "0.1.0"
+    },
+    {
+      "id": "universal-code",
+      "version": "0.1.0"
+    },
+    {
+      "id": "code-minimalism",
+      "version": "0.1.0"
+    },
+    {
+      "id": "ci-github",
+      "version": "0.1.0"
+    }
+  ]
+}
