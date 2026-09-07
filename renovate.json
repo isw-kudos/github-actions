@@ -139,12 +139,25 @@
       "commitMessageSuffix": ""
     },
     {
+      "description": "Trivy - group the CLI version pin (tofu-pre-commit.yml setup-trivy version: input) with the setup-trivy action, gated behind Dependency Dashboard approval and never automerged; a security scanner bump should be vetted before the gate moves. Also stops the phantom pin error: the built-in github-actions manager maps setup-trivy's version: input to a virtual aquasecurity/trivy dep with no digest-pinnable literal in the file, so pinDigests fails it ('Error updating branch: update failure' on renovate/pin-dependencies). Grouping under dashboard approval keeps that pin out of the auto-attempted path. Mirrors isw-kudos/irt-flight-manager.",
+      "groupName": "Trivy",
+      "matchPackageNames": ["aquasecurity/trivy", "aquasecurity/setup-trivy"],
+      "automerge": false,
+      "dependencyDashboardApproval": true,
+      "dependencyDashboardCategory": "Security tooling"
+    },
+    {
       "description": "Zizmor - keep the pinned CLI version and the zizmor-action release moving together in ONE PR, gated behind Dependency Dashboard approval and never automerged. zizmor-action ships a support/versions allowlist mapping each exact CLI version to a vetted image digest; its action.sh dies with 'Unknown version' when the version: input is not in the allowlist bundled by the SHA-pinned action release, and the zizmor CLI publishes ahead of the action. Grouping the CLI dep with the action dep makes Renovate propose both in a single branch. THREE package names: the CLI version: input in zizmor.yml is ALSO claimed by the built-in github-actions manager as the docker dep ghcr.io/zizmorcore/zizmor, distinct from the zizmorcore/zizmor github-releases dep the customManager derives from the same literal. Omitting the ghcr name leaves that docker dep ungated - it falls through to pinDigests + the minor/patch automerge rule, and the pin attempt fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). See isw-kudos/github-actions .github/workflows/zizmor.yml.",
       "groupName": "Zizmor",
       "matchPackageNames": ["ghcr.io/zizmorcore/zizmor", "zizmorcore/zizmor", "zizmorcore/zizmor-action"],
       "automerge": false,
       "dependencyDashboardApproval": true,
       "dependencyDashboardCategory": "Security tooling"
+    },
+    {
+      "description": "Disable digest pinning for the two VIRTUAL deps the github-actions manager derives from setup-trivy / zizmor-action `version:` inputs. These are CLI version strings, not uses:/image: refs, so there is no digest-pinnable literal in the workflow - pinDigests just fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). The real SHA-pinned action refs (aquasecurity/setup-trivy, zizmorcore/zizmor-action) are separate uses: lines, unaffected by this and still pinned. Must stay AFTER the github-actions manager rule that sets pinDigests:true so this override wins.",
+      "matchPackageNames": ["aquasecurity/trivy", "ghcr.io/zizmorcore/zizmor"],
+      "pinDigests": false
     }
   ],
   "pre-commit": {
