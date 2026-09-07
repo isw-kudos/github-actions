@@ -123,7 +123,12 @@ jobs:
         uses: anthropics/claude-code-action@9c5ddab2e6d17b83ea679153b31f1d5f023cf636 # v1.0.217
         with:
           allowed_bots: 'renovate[bot]'
-          claude_args: '--max-turns 20'
+          # Least-privilege tool allowlist — grant only the read/inspection
+          # commands a review needs; never an unbounded Bash(*). The reviewer
+          # reads PR content (untrusted), so keep this list narrow.
+          claude_args: >-
+            --max-turns 20
+            --allowed-tools "Bash(git *),Bash(gh *),Bash(grep *),Bash(find *),Bash(ls *)"
           claude_code_oauth_token: ${{ steps.anthropic-auth.outputs.access_token }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
