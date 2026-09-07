@@ -76,9 +76,6 @@ Pin to a component tag instead of a commit SHA or `@main`:
 ```yaml
 # Recommended: pin to a component tag
 uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@docker-build-v1.2.3
-
-# Or via ISW-Cloud42 directly
-uses: ISW-Cloud42/github-actions/.github/workflows/tofu-pre-commit.yml@tofu-pre-commit-v1.0.0
 ```
 
 ### Renovate config for consuming repos

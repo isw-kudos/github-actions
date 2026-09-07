@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is `ISW-Cloud42/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`). Dev happens here; `isw-kudos/github-actions` is the public repo consumers reference.
+This is `isw-kudos/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`). Consumers reference it directly by component tag.
 
 ## Commands
 

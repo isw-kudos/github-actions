@@ -1,6 +1,6 @@
 ---
 name: per-component-versioning
-description: Use when working with releases, version bumps, semantic-release, component tags, Renovate scopes, or adding a new reusable workflow/action component to ISW-Cloud42/github-actions. Triggers include questions like "how is X released", "what version bump will this commit produce", "how do I add a new component", "why didn't a release fire", or any change to release-*.yml, releases/**, or renovate.json packageRules.
+description: Use when working with releases, version bumps, semantic-release, component tags, Renovate scopes, or adding a new reusable workflow/action component to isw-kudos/github-actions. Triggers include questions like "how is X released", "what version bump will this commit produce", "how do I add a new component", "why didn't a release fire", or any change to release-*.yml, releases/**, or renovate.json packageRules.
 ---
 
 # Per-Component Versioning
