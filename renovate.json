@@ -139,9 +139,9 @@
       "commitMessageSuffix": ""
     },
     {
-      "description": "Zizmor - keep the pinned CLI version and the zizmor-action release moving together in ONE PR, gated behind Dependency Dashboard approval and never automerged. zizmor-action ships a support/versions allowlist mapping each exact CLI version to a vetted image digest; its action.sh dies with 'Unknown version' when the version: input is not in the allowlist bundled by the SHA-pinned action release, and the zizmor CLI publishes ahead of the action. Grouping the CLI dep with the action dep makes Renovate propose both in a single branch. See isw-kudos/github-actions .github/workflows/zizmor.yml.",
+      "description": "Zizmor - keep the pinned CLI version and the zizmor-action release moving together in ONE PR, gated behind Dependency Dashboard approval and never automerged. zizmor-action ships a support/versions allowlist mapping each exact CLI version to a vetted image digest; its action.sh dies with 'Unknown version' when the version: input is not in the allowlist bundled by the SHA-pinned action release, and the zizmor CLI publishes ahead of the action. Grouping the CLI dep with the action dep makes Renovate propose both in a single branch. THREE package names: the CLI version: input in zizmor.yml is ALSO claimed by the built-in github-actions manager as the docker dep ghcr.io/zizmorcore/zizmor, distinct from the zizmorcore/zizmor github-releases dep the customManager derives from the same literal. Omitting the ghcr name leaves that docker dep ungated - it falls through to pinDigests + the minor/patch automerge rule, and the pin attempt fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). See isw-kudos/github-actions .github/workflows/zizmor.yml.",
       "groupName": "Zizmor",
-      "matchPackageNames": ["zizmorcore/zizmor", "zizmorcore/zizmor-action"],
+      "matchPackageNames": ["ghcr.io/zizmorcore/zizmor", "zizmorcore/zizmor", "zizmorcore/zizmor-action"],
       "automerge": false,
       "dependencyDashboardApproval": true,
       "dependencyDashboardCategory": "Security tooling"
