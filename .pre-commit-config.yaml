@@ -20,7 +20,7 @@ repos:
   # Workflow security audit — offline + regular persona to match CI's gate;
   # the zizmor.yml workflow runs the full online pass on the PR.
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.29.0
+    rev: v1.30.0
     hooks:
       - id: zizmor
         args: [--persona, regular, --offline]
