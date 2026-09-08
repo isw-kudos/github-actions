@@ -17,6 +17,14 @@
   storage-path rejoined under tmpdir, pid saved after readiness); all fixed
   and re-verified locally, recorded in the plan's "Review fixes" section.
 
+- PR #19 merged, but `release-turbo-repo-cache` cut nothing: the squash
+  commit `feat(turbo-repo-cache)!: ...` was not parsed by commit-analyzer's
+  default angular preset (`!` breaks its header regex), and the squash setting
+  blanks the body so the `BREAKING CHANGE:` footer was lost. Fixed all seven
+  components with `preset: 'conventionalcommits'` + the preset package on the
+  `npx` line, a Renovate regex manager for those pins, and `!` support in the
+  commit-scope hook. v2.0.0 must be re-released via `workflow_dispatch`.
+
 ### Decisions
 - Nested node action instead of shell-only composite purely to get a `post`
   hook (orphaned server on self-hosted runners otherwise). Zero deps so there

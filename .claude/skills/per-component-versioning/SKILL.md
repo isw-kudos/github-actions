@@ -23,6 +23,8 @@ Tag prefix convention is `<component>-v`. Watched paths must match the release w
 - Each component has `.github/workflows/release-<component>.yml` triggered by push to `main` with a `paths:` filter scoped to the component's files.
 - Release workflow runs `npx semantic-release` from `releases/<component>/` (each has its own `.releaserc.js` with a `scope` constant that gates which commits trigger a release and appear in release notes).
 - Plain `semantic-release` is used (not `semantic-release-monorepo`) because reusable workflows share `.github/workflows/`, which prevents directory-based commit filtering.
+- Both commit-analyzer and release-notes-generator use `preset: 'conventionalcommits'` (the package is supplied via `npx --package conventional-changelog-conventionalcommits@<pin>` in each release workflow). The default `angular` preset cannot parse `type(scope)!:` headers, and squash merges drop `BREAKING CHANGE:` footers, so without this preset a major bump silently produces no release. Do not remove either half.
+- **The PR title is the commit.** Squash merge uses the PR title as subject with a blank body. Make the PR title conventional and scoped, and use `!` (not a footer) for breaking changes.
 - `@semantic-release/github` creates the git tag and GitHub Release.
 
 ## Conventional Commit bump rules
