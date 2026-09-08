@@ -13,7 +13,7 @@ case "$commit_subject" in
 esac
 
 # Extract scope from "type(scope): subject" — empty string if no scope
-scope=$(echo "$commit_subject" | sed -n 's/^[a-z]*(\([^)]*\)):.*/\1/p')
+scope=$(echo "$commit_subject" | sed -n 's/^[a-z]*(\([^)]*\))!\{0,1\}:.*/\1/p')
 
 staged=$(git diff --cached --name-only)
 [ -z "$staged" ] && exit 0

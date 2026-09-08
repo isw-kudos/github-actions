@@ -38,6 +38,17 @@
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the semantic-release and conventionalcommits-preset pins in the release-*.yml `npx --package <name>@<version>` invocations as npm deps; without this the release toolchain never gets bumped.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/release-[^/]+\\.yml$/"
+      ],
+      "matchStrings": [
+        "--package (?<depName>[@a-z0-9/._-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "datasourceTemplate": "npm"
     }
   ],
   "packageRules": [

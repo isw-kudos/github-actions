@@ -32,6 +32,14 @@ Version bumps are determined by [conventional commit](https://www.conventionalco
 | `chore(<component>)` | Patch | `chore(ecs-deploy): update boto3` (Renovate dep bumps) |
 | Any other scope | No release | Commits scoped to other components are ignored |
 
+Use the `!` form for breaking changes. The repo squash-merges with the PR title
+as the subject and a **blank body**, so a `BREAKING CHANGE:` footer written in a
+branch commit never reaches `main`; only the `!` in the PR title survives. The
+release config uses the `conventionalcommits` preset for exactly this reason:
+the default `angular` preset cannot parse `type(scope)!:` at all and silently
+produces no release (this bit `turbo-repo-cache` v2.0.0, re-released via
+`workflow_dispatch`). Keep the PR title conventional; it becomes the commit.
+
 ### Scoped commits
 
 Renovate is configured to use component-scoped commit messages (e.g. `chore(docker-build): update docker/build-push-action`). This is done via `semanticCommitScope` rules in `renovate.json`. Renovate uses `chore` rather than `fix` because dependency bumps are maintenance, not bug fixes.
