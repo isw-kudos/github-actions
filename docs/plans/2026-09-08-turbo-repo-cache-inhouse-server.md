@@ -117,3 +117,28 @@ CI: the `turbo-repo-cache-test.yml` job must pass on the PR.
   the port is always a free one; add inputs only if a consumer needs them.
 - Renovate: the existing `.github/actions/turbo-repo-cache/**` packageRule
   already scopes the npm bump to `chore(turbo-repo-cache)`; nothing to wire.
+
+### Review fixes (independent review of PR #19, 2026-09-08)
+
+- Child env is now an allowlist (`PATH`, `HOME`, temp, proxy/CA, cloud
+  credential prefixes) with `NODE_ENV=production` pinned. Reviewer reproduced
+  `NODE_ENV=development` + a workspace `.env` with `READ_ONLY=true` putting the
+  server into read-only mode while the job stayed green.
+- `npm ci` runs in a per-invocation `$RUNNER_TEMP/turbo-repo-cache/<id>/` dir
+  with `--registry` forced to the public registry and a blank `--userconfig`
+  (`npm_config_*` stripped): `actions/setup-node` with `registry-url` would
+  otherwise redirect the install, and a second use of the action in one job
+  would `npm ci`-wipe the first server's `node_modules`.
+- `STORAGE_PATH_USE_TMP_FOLDER=false`: the local provider otherwise rejoins
+  `storage-path` under `os.tmpdir()`. The smoke test now asserts the artifact
+  lands under the given path.
+- pid/log_dir are written to `GITHUB_STATE` immediately after spawn, before the
+  readiness wait, so a cancelled startup can still be reaped.
+- `stop.cjs` cannot fail the job: `ESRCH` on kill is tolerated and `main()` is
+  wrapped; logs are tailed (200 lines) and only visible on the warning path.
+- Readiness-timeout errors include `out.log` (fastify logs to stdout).
+- `child.on("error")` handled; empty `team-id` falls back to `ci`; the test
+  workflow is mapped in `check-component-scope.sh`.
+- Not changed: the reviewer flagged `$/` inside a composite as unverified. The
+  GitHub metadata-syntax docs document it explicitly for composite steps; a
+  scratch-consumer run before cutting the tag remains a cheap check.

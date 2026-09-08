@@ -58,6 +58,10 @@ jobs:
             -H "Authorization: Bearer $TURBO_TOKEN"
           cmp artifact.bin roundtrip.bin
 
+          # storage-path must be honoured literally (not rejoined under os.tmpdir())
+          test -n "$(find "$RUNNER_TEMP/turbo-cache-store" -type f -name "$hash")" \
+            || { echo "artifact not found under storage-path"; find "$RUNNER_TEMP/turbo-cache-store"; exit 1; }
+
           unauth_status=$(curl -sS -o /dev/null -w '%{http_code}' \
             "$TURBO_API/v8/artifacts/$hash?teamId=$TURBO_TEAM")
           test "$unauth_status" != "200" || { echo "unauthenticated GET was served (HTTP 200)"; exit 1; }

@@ -11,6 +11,11 @@
 - Added `turbo-repo-cache-test.yml` (local-storage smoke test with a curl
   artifact round-trip) and listed it in the required-checks gate.
 - Plan: `docs/plans/2026-09-08-turbo-repo-cache-inhouse-server.md`.
+- Opened PR #19 (draft). Independent Opus review found six real defects
+  (job-env leaking into the server, consumer npm registry config honoured,
+  shared install dir wiped by a second use, unguarded kill in post, local
+  storage-path rejoined under tmpdir, pid saved after readiness); all fixed
+  and re-verified locally, recorded in the plan's "Review fixes" section.
 
 ### Decisions
 - Nested node action instead of shell-only composite purely to get a `post`

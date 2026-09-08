@@ -47,8 +47,10 @@ steps:
 ## Prerequisites
 
 - **npm on PATH.** The server package is pinned in `server/package.json` and
-  installed with `npm ci` when the action starts (about 7 s cold). The server
-  itself runs on the runner's bundled Node 24, so the job's own Node version is
+  installed with `npm ci` when the action starts (about 7 s cold), into a
+  per-invocation directory under the runner temp path, always from the public
+  npm registry regardless of the job's npm configuration. The server itself
+  runs on the runner's bundled Node 24, so the job's own Node version is
   irrelevant.
 - **Runner 2.336.0 or newer.** The composite calls its `server/` sub-action via
   the `$/` self-repository reference so both are always at the same commit.
@@ -61,19 +63,31 @@ action.yml (composite)
   ├─ google-github-actions/auth  -> GOOGLE_APPLICATION_CREDENTIALS
   └─ server/ (node24, zero dependencies)
        start.cjs : validate inputs, npm ci, free port + random token,
-                   spawn detached `turborepo-remote-cache`, wait for
-                   GET /v8/artifacts/status == 200, export TURBO_*
-       stop.cjs  : post hook; SIGTERM the server, print its logs
+                   spawn detached `turborepo-remote-cache` with an
+                   allowlisted env, wait for GET /v8/artifacts/status == 200,
+                   export TURBO_*
+       stop.cjs  : post hook; SIGTERM the server, print its log tail
 ```
 
 The GCS provider in `turborepo-remote-cache` uses Application Default
 Credentials when no explicit `GCS_*` key is set, which is what the auth step
-provides. A server that dies mid-job is reported as a warning by the post step
-rather than a failure: `turbo` degrades to cache misses.
+provides. The server does not inherit the job's environment: only `PATH`,
+`HOME`, proxy and CA variables, and cloud credential variables (`GOOGLE_*`,
+`GCLOUD_*`, `CLOUDSDK_*`, `GCS_*`, `AWS_*`, `S3_*`, `ABS_*`, `AZURE_*`) are
+passed through, and `NODE_ENV` is pinned to `production`. This stops a
+consumer's `NODE_ENV=development` or root `.env` from silently reconfiguring
+the cache (for example into read-only mode).
 
-`server/` can be used on its own (`storage-provider: local` or with your own
-cloud credentials in `env`); the smoke test in
-`.github/workflows/turbo-repo-cache-test.yml` does exactly that.
+A server that dies mid-job is reported as a warning by the post step rather
+than a failure: `turbo` degrades to cache misses. The post step prints the
+last 200 lines of the server log as a visible group on that path; on a healthy
+stop they are emitted as `::debug::` lines, shown when step debug logging is
+enabled.
+
+`server/` can be used on its own (`storage-provider: local` with a directory
+path, honoured literally, or with your own cloud credentials in the step's
+`env`); the smoke test in `.github/workflows/turbo-repo-cache-test.yml` does
+exactly that.
 
 ## Versioning
 

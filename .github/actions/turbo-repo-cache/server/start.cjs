@@ -19,9 +19,42 @@ const STORAGE_PROVIDERS = new Set([
 ]);
 const STORAGE_PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 const TEAM_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const DEFAULT_TEAM_ID = "ci";
 const HOST = "127.0.0.1";
+const NPM_REGISTRY = "https://registry.npmjs.org/";
 const READY_TIMEOUT_MS = 15_000;
 const READY_POLL_MS = 250;
+
+// The server reads ~40 env vars (NODE_ENV, READ_ONLY, SSL_*, AUTH_MODE, ...),
+// so a consumer's job env must not leak into it wholesale: NODE_ENV=development
+// alone makes it load the workspace .env. Only what it needs to reach the
+// network and the storage backend is passed through.
+const CHILD_ENV_NAMES = new Set([
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+]);
+const CHILD_ENV_PREFIXES = [
+  "GOOGLE_",
+  "GCLOUD_",
+  "CLOUDSDK_",
+  "GCS_",
+  "AWS_",
+  "S3_",
+  "ABS_",
+  "AZURE_",
+];
 
 class InputValidationError extends Error {
   constructor(name, reason) {
@@ -52,7 +85,8 @@ function readInput(name) {
 function loadConfig() {
   const storageProvider = readInput("storage-provider");
   const storagePath = readInput("storage-path");
-  const teamId = readInput("team-id");
+  // An explicit empty string bypasses the action.yml default, so default here too.
+  const teamId = readInput("team-id") || DEFAULT_TEAM_ID;
 
   if (!STORAGE_PROVIDERS.has(storageProvider)) {
     throw new InputValidationError(
@@ -67,24 +101,54 @@ function loadConfig() {
     throw new InputValidationError("team-id", "must match [A-Za-z0-9_-]+");
   }
 
-  const runnerTemp = requireEnv("RUNNER_TEMP");
+  // Per-invocation directory: a second use of the action in the same job must
+  // not `npm ci` over (i.e. delete) the tree the first server is running from.
+  const workDir = path.join(
+    requireEnv("RUNNER_TEMP"),
+    "turbo-repo-cache",
+    crypto.randomBytes(4).toString("hex"),
+  );
+
   return Object.freeze({
     storageProvider,
     storagePath,
     teamId,
-    logDir: path.join(runnerTemp, "turbo-repo-cache"),
+    workDir,
     githubEnvFile: requireEnv("GITHUB_ENV"),
     githubStateFile: requireEnv("GITHUB_STATE"),
   });
 }
 
-function installServer() {
+function installServer(workDir) {
+  for (const file of ["package.json", "package-lock.json"]) {
+    fs.copyFileSync(path.join(__dirname, file), path.join(workDir, file));
+  }
+  // Consumers often run actions/setup-node with registry-url, which points npm
+  // (via NPM_CONFIG_USERCONFIG) at a private registry with their auth token.
+  // Force the public registry and a blank user config so the pinned lockfile
+  // resolves exactly as committed.
+  const userConfig = path.join(workDir, ".npmrc");
+  fs.writeFileSync(userConfig, "");
+  const npmEnv = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => !/^npm_config_/i.test(name),
+    ),
+  );
+
   console.log("::group::Install turborepo-remote-cache");
   try {
     execFileSync(
       "npm",
-      ["ci", "--omit=dev", "--no-audit", "--no-fund", "--ignore-scripts"],
-      { cwd: __dirname, stdio: "inherit" },
+      [
+        "ci",
+        "--omit=dev",
+        "--no-audit",
+        "--no-fund",
+        "--ignore-scripts",
+        `--registry=${NPM_REGISTRY}`,
+        `--userconfig=${userConfig}`,
+      ],
+      { cwd: workDir, env: npmEnv, stdio: "inherit" },
     );
   } catch (error) {
     if (error.code === "ENOENT") {
@@ -110,6 +174,27 @@ function findFreePort() {
   });
 }
 
+function buildChildEnv(config, port, token) {
+  const env = {};
+  for (const [name, value] of Object.entries(process.env)) {
+    const allowed =
+      CHILD_ENV_NAMES.has(name) ||
+      CHILD_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
+    if (allowed) env[name] = value;
+  }
+  return {
+    ...env,
+    NODE_ENV: "production",
+    HOST,
+    PORT: String(port),
+    TURBO_TOKEN: token,
+    STORAGE_PROVIDER: config.storageProvider,
+    STORAGE_PATH: config.storagePath,
+    // Otherwise the local provider silently rejoins storage-path under os.tmpdir().
+    STORAGE_PATH_USE_TMP_FOLDER: "false",
+  };
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -129,26 +214,38 @@ function isServerReady(port) {
   });
 }
 
-function readLog(logDir, name) {
+function readLog(workDir, name) {
   try {
-    return fs.readFileSync(path.join(logDir, name), "utf8");
+    return fs.readFileSync(path.join(workDir, name), "utf8");
   } catch {
     return "";
   }
 }
 
-async function waitUntilReady(child, port, logDir) {
+// The server logs to stdout; err.log only carries node warnings.
+function readServerLogs(workDir) {
+  return readLog(workDir, "err.log") + readLog(workDir, "out.log");
+}
+
+async function waitUntilReady(child, port, workDir) {
   let exitCode = null;
+  let spawnError = null;
   child.on("exit", (code) => {
     exitCode = code ?? -1;
+  });
+  child.on("error", (error) => {
+    spawnError = error;
   });
 
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
+    if (spawnError) {
+      throw new ServerStartError(`Failed to spawn server: ${spawnError.message}`);
+    }
     if (exitCode !== null) {
       throw new ServerStartError(
         `Turborepo remote cache server exited with code ${exitCode} during startup`,
-        readLog(logDir, "err.log") || readLog(logDir, "out.log"),
+        readServerLogs(workDir),
       );
     }
     if (await isServerReady(port)) return;
@@ -158,23 +255,23 @@ async function waitUntilReady(child, port, logDir) {
   if (exitCode === null) process.kill(child.pid, "SIGTERM");
   throw new ServerStartError(
     `Turborepo remote cache server did not become ready on port ${port} within ${READY_TIMEOUT_MS} ms`,
-    readLog(logDir, "err.log"),
+    readServerLogs(workDir),
   );
 }
 
 async function main() {
   const config = loadConfig();
-  installServer();
+  fs.mkdirSync(config.workDir, { recursive: true });
+  installServer(config.workDir);
 
-  fs.mkdirSync(config.logDir, { recursive: true });
   const port = await findFreePort();
   const token = crypto.randomBytes(24).toString("hex");
   console.log(`::add-mask::${token}`);
 
-  const outFd = fs.openSync(path.join(config.logDir, "out.log"), "w");
-  const errFd = fs.openSync(path.join(config.logDir, "err.log"), "w");
+  const outFd = fs.openSync(path.join(config.workDir, "out.log"), "w");
+  const errFd = fs.openSync(path.join(config.workDir, "err.log"), "w");
   const cli = path.join(
-    __dirname,
+    config.workDir,
     "node_modules",
     "turborepo-remote-cache",
     "dist",
@@ -187,28 +284,24 @@ async function main() {
   const child = spawn(process.execPath, [cli], {
     detached: true,
     stdio: ["ignore", outFd, errFd],
-    env: {
-      ...process.env,
-      HOST,
-      PORT: String(port),
-      TURBO_TOKEN: token,
-      STORAGE_PROVIDER: config.storageProvider,
-      STORAGE_PATH: config.storagePath,
-    },
+    env: buildChildEnv(config, port, token),
   });
   fs.closeSync(outFd);
   fs.closeSync(errFd);
 
+  // Record the pid before waiting, so a cancellation mid-startup still lets the
+  // post hook reap the server instead of orphaning it on a self-hosted runner.
+  fs.appendFileSync(
+    config.githubStateFile,
+    `pid=${child.pid}\nlog_dir=${config.workDir}\n`,
+  );
+
   try {
-    await waitUntilReady(child, port, config.logDir);
+    await waitUntilReady(child, port, config.workDir);
   } finally {
     child.unref();
   }
 
-  fs.appendFileSync(
-    config.githubStateFile,
-    `pid=${child.pid}\nlog_dir=${config.logDir}\n`,
-  );
   fs.appendFileSync(
     config.githubEnvFile,
     `TURBO_API=http://${HOST}:${port}\nTURBO_TOKEN=${token}\nTURBO_TEAM=${config.teamId}\n`,
