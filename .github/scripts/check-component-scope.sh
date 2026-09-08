@@ -29,6 +29,8 @@ while IFS= read -r f; do
       required_scopes="$required_scopes determine-image-digest" ;;
     .github/workflows/docker-build.yml)
       required_scopes="$required_scopes docker-build" ;;
+    .github/workflows/docker-build-ghcr.yml)
+      required_scopes="$required_scopes docker-build-ghcr" ;;
     .github/workflows/ecs-deploy.yml|.github/actions/ecs-query/*)
       required_scopes="$required_scopes ecs-deploy" ;;
     .github/workflows/tofu-pre-commit.yml)

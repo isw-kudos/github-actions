@@ -13,6 +13,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | Component | Tag prefix | Watched paths | Consumers |
 |---|---|---|---|
 | docker-build | `docker-build-v` | `.github/workflows/docker-build.yml` | erc-api-v1, erc-web, erc-pdf |
+| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (migrating from `isw-kudos/devops` `docker-build-generic.yml`) |
 | ecs-deploy | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | erc-api-v1, erc-web, erc-pdf |
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |
 | tofu-pre-commit | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` | nat-instance, aws-alb, aws-ecs, aws-instance, aws-vpc, mongo-atlas |
@@ -59,6 +60,7 @@ Mapping currently in `renovate.json`:
 | Path matched by Renovate | Resulting commit | Component released |
 |---|---|---|
 | `.github/workflows/docker-build.yml` | `chore(docker-build): ...` | docker-build (patch) |
+| `.github/workflows/docker-build-ghcr.yml` | `chore(docker-build-ghcr): ...` | docker-build-ghcr (patch) |
 | `.github/workflows/ecs-deploy.yml` | `chore(ecs-deploy): ...` | ecs-deploy (patch) |
 | `.github/actions/ecs-query/**` | `chore(ecs-deploy): ...` | ecs-deploy (patch) — ecs-query is part of the ecs-deploy component |
 | `.github/workflows/determine-image-digest.yml` | `chore(determine-image-digest): ...` | determine-image-digest (patch) |
@@ -157,6 +159,7 @@ Each component has a `.releaserc.js` in `releases/<component>/`:
 ```
 releases/
   docker-build/.releaserc.js
+  docker-build-ghcr/.releaserc.js
   ecs-deploy/.releaserc.js
   determine-image-digest/.releaserc.js
   tofu-pre-commit/.releaserc.js
@@ -201,6 +204,7 @@ pre-commit install --hook-type commit-msg
 | Files | Scope | Resulting commit format |
 |---|---|---|
 | `.github/workflows/docker-build.yml` | `docker-build` | `chore(docker-build): ...` |
+| `.github/workflows/docker-build-ghcr.yml` | `docker-build-ghcr` | `chore(docker-build-ghcr): ...` |
 | `.github/workflows/ecs-deploy.yml` | `ecs-deploy` | `chore(ecs-deploy): ...` |
 | `.github/actions/ecs-query/**` | `ecs-deploy` | `chore(ecs-deploy): ...` |
 | `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `chore(determine-image-digest): ...` |

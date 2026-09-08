@@ -2,45 +2,47 @@
 
 ## 2026-09-08
 ### Accomplished
-- Replaced `trappar/turborepo-remote-cache-gh-action` (pinned at the 2023
-  `v1` tag, `node16`, maintainer unresponsive) inside
-  `.github/actions/turbo-repo-cache` with an in-house `server/` sub-action:
-  zero-dependency node24 `start.cjs`/`stop.cjs` that `npm ci`s a pinned
-  `turborepo-remote-cache` (2.12.3), runs it detached on loopback, exports
-  `TURBO_*`, and reaps it in `post`. Composite calls it via `$/`.
-- Added `turbo-repo-cache-test.yml` (local-storage smoke test with a curl
-  artifact round-trip) and listed it in the required-checks gate.
-- Plan: `docs/plans/2026-09-08-turbo-repo-cache-inhouse-server.md`.
-- Opened PR #19 (draft). Independent Opus review found six real defects
-  (job-env leaking into the server, consumer npm registry config honoured,
-  shared install dir wiped by a second use, unguarded kill in post, local
-  storage-path rejoined under tmpdir, pid saved after readiness); all fixed
-  and re-verified locally, recorded in the plan's "Review fixes" section.
-
-- PR #19 merged, but `release-turbo-repo-cache` cut nothing: the squash
-  commit `feat(turbo-repo-cache)!: ...` was not parsed by commit-analyzer's
-  default angular preset (`!` breaks its header regex), and the squash setting
-  blanks the body so the `BREAKING CHANGE:` footer was lost. Fixed all seven
-  components with `preset: 'conventionalcommits'` + the preset package on the
-  `npx` line, a Renovate regex manager for those pins, and `!` support in the
-  commit-scope hook. v2.0.0 must be re-released via `workflow_dispatch`.
+- Migrated `isw-kudos/devops` `docker-build-generic.yml` into this repo as the
+  `docker-build-ghcr` component (`.github/workflows/docker-build-ghcr.yml`),
+  inputs name-for-name identical so the 20 callers in boards (7), collab (9)
+  and huddo-services (4) change only their `uses:` line.
+- Hardening vs the original: SHA-pinned actions, `permissions: {}` + job grant,
+  `persist-credentials: false`, app token scoped to the caller plus its
+  same-owner submodules (parsed from `.gitmodules`, allowlisted) with
+  `permission-contents: read`, declared `secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY`
+  so callers can drop `secrets: inherit`, `outputs.digest`, concurrency group
+  keyed by image, QEMU only for non-amd64.
+- Full component wiring: `.releaserc.js`, `release-docker-build-ghcr.yml`,
+  renovate scope rule, commit-msg hook case, docs/CLAUDE.md/README tables.
+- Plan: `docs/plans/2026-09-08-docker-build-ghcr-migration.md`. Independent
+  adversarial review found the detect pipeline failed under `pipefail` on an
+  empty match; fixed and re-verified by running the extracted step against
+  boards' real `.gitmodules`.
 
 ### Decisions
-- Nested node action instead of shell-only composite purely to get a `post`
-  hook (orphaned server on self-hosted runners otherwise). Zero deps so there
-  is no ncc/dist bundle to maintain.
-- Server runs on the runner's node24 (`process.execPath`); only `npm` on PATH
-  is a prerequisite. No `setup-node` inside the action (would clobber the
-  consumer's node version).
-- Dead server at job end is a warning, not a failure (turbo degrades to misses).
-- Release as `feat(turbo-repo-cache)!` — new runner >= 2.336.0 and npm
-  prerequisites for consumers.
+- Separate component rather than a registry switch on the ECR `docker-build.yml`:
+  that workflow is `vars`-driven and AWS-shaped; a mode flag would double its
+  inputs and force a major on the erc-* consumers.
+- Kept the two-checkout dance: `secrets` is unavailable in step `if:`, so
+  `.gitmodules` on disk stays the signal for needing the app token.
+- `vars.HUDDO_DEVOPS_GITHUB_APP_ID` stays a `vars` lookup (resolves against the
+  caller's org); an input default cannot reference `vars`.
 
 ### Next Steps
-- Open the PR (draft first per the `pr` skill), confirm the smoke test and
-  zizmor pass in CI, then bump huddo's pin to `turbo-repo-cache-v2.0.0`.
-- Watch the first real GCS run: ADC via `GOOGLE_APPLICATION_CREDENTIALS` is
-  the same path the old action used, but verify the post-step log group.
+- Commit as `feat(docker-build-ghcr): migrate docker-build-generic from devops`
+  and open the PR (draft first). With no prior tag semantic-release cuts
+  `docker-build-ghcr-v1.0.0` on merge; no seed tag needed.
+- Re-point one huddo-services caller first (no submodule, no secret), then a
+  boards caller with the explicit `secrets:` mapping and its
+  `zizmor: ignore[secrets-inherit]` removed, then the remaining 18.
+- Once all callers are moved, delete `docker-build-generic.yml` from devops.
+- Next devops workflows to migrate: continue the same pattern.
+
+## 2026-09-08 (earlier)
+Replaced the unmaintained turbo-repo-cache upstream with an in-house node24
+server sub-action (PR #19, released as `turbo-repo-cache-v2.0.0`), then fixed
+all seven components to the `conventionalcommits` preset so `type(scope)!:`
+releases a major (PR #20).
 
 ## 2026-09-07
 Audited `required-checks.yml` for draft-PR bypass (safe; invariant documented,

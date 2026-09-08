@@ -47,6 +47,24 @@ jobs:
       push: true
 ```
 
+#### docker-build-ghcr
+Builds from the checked-out workspace (so `.dockerignore` applies) and pushes `ghcr.io/<owner>/<image>:<tag>` with a registry build cache. When the calling repo has a `.gitmodules` file, it mints a GitHub App token scoped to the calling repo and its same-owner submodules to check them out; the app client id comes from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Grant exactly `contents: read` and `packages: write` on the calling job; a smaller grant fails the run at startup.
+
+```yaml
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: write
+    uses: isw-kudos/github-actions/.github/workflows/docker-build-ghcr.yml@<dummy hash>
+    with:
+      dockerfile_path: apps/core/Dockerfile
+      image: boards-core
+      tag: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref_name }}
+    secrets: # only when the repo has a private submodule
+      HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
+```
+
 #### ecs-deploy
 Deploys applications to Amazon ECS with automatic rollback on failure.
 
