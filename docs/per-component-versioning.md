@@ -88,26 +88,65 @@ uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@docker-build-v
 
 ### Renovate config for consuming repos
 
-Add `extractVersion` rules so Renovate tracks the correct tag pattern per workflow:
+Pin by SHA with the component tag in the trailing comment, and let one regex
+manager own every `isw-kudos/github-actions` reference:
+
+```yaml
+uses: isw-kudos/github-actions/.github/actions/turbo-repo-cache@<sha> # turbo-repo-cache-v2.0.0
+uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<sha> # docker-build-v1.2.3
+```
 
 ```json
 {
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track every isw-kudos/github-actions component pin; the component name is captured from the tag comment so new components need no config change.",
+      "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "uses:\\s+isw-kudos/github-actions/(?<path>[^@\\s]+)@(?<currentDigest>[a-f0-9]{40})\\s+#\\s+(?<component>[a-z0-9-]+)-v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "isw-kudos/github-actions/{{{component}}}",
+      "packageNameTemplate": "isw-kudos/github-actions",
+      "datasourceTemplate": "github-tags",
+      "extractVersionTemplate": "^{{{component}}}-v(?<version>.*)$",
+      "versioningTemplate": "semver"
+    }
+  ],
   "packageRules": [
     {
-      "matchDepNames": ["isw-kudos/github-actions"],
-      "matchFileNames": [".github/workflows/build.yml"],
-      "extractVersion": "^docker-build-v(?<version>.*)$"
+      "description": "The regex manager owns these pins; the built-in manager reads the comment as an opaque ref and would only duplicate digest PRs.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["isw-kudos/github-actions"],
+      "enabled": false
     },
     {
-      "matchDepNames": ["isw-kudos/github-actions"],
-      "matchFileNames": [".github/workflows/deploy.yml"],
-      "extractVersion": "^ecs-deploy-v(?<version>.*)$"
+      "description": "Our own semantic-released tags do not need the third-party quarantine.",
+      "matchPackageNames": ["isw-kudos/github-actions"],
+      "minimumReleaseAge": null
     }
   ]
 }
 ```
 
-Adjust `matchFileNames` to match the actual workflow file in the consuming repo that references the shared workflow.
+Why this shape (verified with a Renovate 44.39 dry-run lookup, 2026-09-08):
+
+- Renovate's built-in `github-actions` manager reads `# turbo-repo-cache-v1.0.0`
+  as an opaque ref and resolves it through the `github-digest` datasource, so it
+  can follow that one tag's digest but never proposes a version bump. Without
+  the regex manager a consumer never sees a new component release.
+- The regex manager captures `component` from the comment; `extractVersion`
+  strips the prefix so semver ordering works, and the new digest comes from the
+  matching tag. One manager covers every current and future component.
+- Disabling the built-in manager for the package stops two managers claiming
+  the same line (a re-pointed tag would otherwise open two PRs).
+- A consumer's global `minimumReleaseAge` applies to these tags because the
+  github-tags datasource reports release timestamps; the exemption avoids a
+  multi-day hold on our own releases. Renovate shows a held update on the
+  Dependency Dashboard under "Pending Status Checks".
+
+Reference implementations: `isw-kudos/collab`, `isw-kudos/boards`,
+`isw-kudos/huddo-services` (`renovate.json`).
 
 ## Architecture
 
