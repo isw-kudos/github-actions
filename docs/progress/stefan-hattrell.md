@@ -28,10 +28,20 @@
 - `vars.HUDDO_DEVOPS_GITHUB_APP_ID` stays a `vars` lookup (resolves against the
   caller's org); an input default cannot reference `vars`.
 
+- PR #24 merged, but `release-docker-build-ghcr` failed in `generateNotes`:
+  Renovate #21 had bumped `conventional-changelog-conventionalcommits` to v10,
+  which needs `conventional-changelog-writer@9`, while
+  `@semantic-release/release-notes-generator` 14.x (semantic-release 25)
+  bundles writer 8. Pinned the preset back to 9.3.1 in all eight release
+  workflows and added a Renovate `allowedVersions: "<10"` hold; verified with
+  a local `semantic-release --dry-run` that now reaches "Published release 1.0.0".
+
 ### Next Steps
-- Commit as `feat(docker-build-ghcr): migrate docker-build-generic from devops`
-  and open the PR (draft first). With no prior tag semantic-release cuts
-  `docker-build-ghcr-v1.0.0` on merge; no seed tag needed.
+- Merge the preset-pin fix, then `gh workflow run release-docker-build-ghcr.yml`
+  (the release workflow's `paths:` filter does not cover `release-*.yml`, so
+  the fix landing on main will not re-trigger it).
+- Drop the Renovate hold once semantic-release depends on
+  release-notes-generator 15 (writer 9).
 - Re-point one huddo-services caller first (no submodule, no secret), then a
   boards caller with the explicit `secrets:` mapping and its
   `zizmor: ignore[secrets-inherit]` removed, then the remaining 18.

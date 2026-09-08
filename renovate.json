@@ -157,6 +157,11 @@
       "commitMessageSuffix": ""
     },
     {
+      "description": "conventional-changelog-conventionalcommits v10 requires conventional-changelog-writer@9, but @semantic-release/release-notes-generator 14.x (what semantic-release 25 depends on) bundles writer 8, so generateNotes throws 'Missing helper' and every component release fails (broke docker-build-ghcr-v1.0.0 after #21). Hold the preset below 10 until release-notes-generator 15 ships and semantic-release depends on it, then drop this rule.",
+      "matchPackageNames": ["conventional-changelog-conventionalcommits"],
+      "allowedVersions": "<10"
+    },
+    {
       "description": "Trivy - group the CLI version pin (tofu-pre-commit.yml setup-trivy version: input) with the setup-trivy action, gated behind Dependency Dashboard approval and never automerged; a security scanner bump should be vetted before the gate moves. Also stops the phantom pin error: the built-in github-actions manager maps setup-trivy's version: input to a virtual aquasecurity/trivy dep with no digest-pinnable literal in the file, so pinDigests fails it ('Error updating branch: update failure' on renovate/pin-dependencies). Grouping under dashboard approval keeps that pin out of the auto-attempted path. Mirrors isw-kudos/irt-flight-manager.",
       "groupName": "Trivy",
       "matchPackageNames": ["aquasecurity/trivy", "aquasecurity/setup-trivy"],
