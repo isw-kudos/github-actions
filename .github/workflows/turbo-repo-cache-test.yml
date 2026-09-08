@@ -1,0 +1,63 @@
+name: Test turbo-repo-cache
+
+# Smoke test for the turbo-repo-cache server sub-action, run without any cloud
+# credentials via the local storage provider. Proves the exported TURBO_*
+# contract and that an artifact round-trips through the server. The public
+# composite adds only the GCP auth step on top, which cannot run here.
+#
+# Listed in required-checks.yml: it must keep running on draft PRs.
+
+on:
+  pull_request:
+    paths:
+      - ".github/actions/turbo-repo-cache/**"
+      - ".github/workflows/turbo-repo-cache-test.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Smoke test turbo-repo-cache server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # $/ loads the in-repo action at the running commit
+    steps:
+      - name: Start server with local storage
+        uses: $/.github/actions/turbo-repo-cache/server
+        with:
+          storage-provider: local
+          storage-path: ${{ runner.temp }}/turbo-cache-store
+          team-id: smoke
+
+      - name: Assert exported environment
+        run: |
+          echo "$TURBO_API"   | grep -E '^http://127\.0\.0\.1:[0-9]+$'
+          echo "$TURBO_TOKEN" | grep -E '^[0-9a-f]{48}$'
+          echo "$TURBO_TEAM"  | grep -E '^smoke$'
+
+      - name: Round-trip an artifact through the server
+        run: |
+          hash="0123456789abcdef0123456789abcdef01234567"
+          printf 'turbo cache smoke test' > artifact.bin
+
+          put_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -X PUT "$TURBO_API/v8/artifacts/$hash?teamId=$TURBO_TEAM" \
+            -H "Authorization: Bearer $TURBO_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @artifact.bin)
+          test "$put_status" = "200" || { echo "PUT returned $put_status"; exit 1; }
+
+          curl -sS -f -o roundtrip.bin \
+            "$TURBO_API/v8/artifacts/$hash?teamId=$TURBO_TEAM" \
+            -H "Authorization: Bearer $TURBO_TOKEN"
+          cmp artifact.bin roundtrip.bin
+
+          unauth_status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            "$TURBO_API/v8/artifacts/$hash?teamId=$TURBO_TEAM")
+          test "$unauth_status" != "200" || { echo "unauthenticated GET was served (HTTP 200)"; exit 1; }

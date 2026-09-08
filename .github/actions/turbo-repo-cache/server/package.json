@@ -1,0 +1,8 @@
+{
+  "name": "turbo-repo-cache-server",
+  "private": true,
+  "description": "Pins the turborepo-remote-cache server that start.cjs installs and runs. Renovate bumps it as chore(turbo-repo-cache).",
+  "dependencies": {
+    "turborepo-remote-cache": "2.12.3"
+  }
+}

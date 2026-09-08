@@ -3,7 +3,12 @@ description: >-
   Authenticate to Google Cloud via OIDC workload identity federation and
   start a local Turborepo remote-cache server backed by a Google Cloud
   Storage bucket. Subsequent `turbo` invocations in the job will read and
-  write cache entries through the local server.
+  write cache entries through the local server, which is stopped when the
+  job ends.
+
+# Prerequisites for the calling job: `id-token: write` permission, npm on
+# PATH (the server package is installed at runtime), and a runner >= 2.336.0
+# (the `$/` self-repository reference below). See README.md.
 
 inputs:
   workload-identity-provider:
@@ -19,10 +24,17 @@ inputs:
     required: true
   storage-provider:
     description: >-
-      Storage backend understood by trappar/turborepo-remote-cache-gh-action
-      (e.g. google-cloud-storage, s3). Defaults to google-cloud-storage.
+      Storage backend understood by turborepo-remote-cache (s3,
+      google-cloud-storage, azure-blob-storage). Defaults to
+      google-cloud-storage, the only one the auth step above provides
+      credentials for.
     required: false
     default: google-cloud-storage
+  team-id:
+    description: >-
+      Exported as TURBO_TEAM; namespaces cache entries within the bucket.
+    required: false
+    default: ci
 
 runs:
   using: composite
@@ -34,7 +46,8 @@ runs:
         service_account: ${{ inputs.service-account }}
 
     - name: Start Turborepo remote cache server
-      uses: trappar/turborepo-remote-cache-gh-action@363c213500bd1ae6700a7027a1cc07a3c5620aab # v1
+      uses: $/.github/actions/turbo-repo-cache/server # self-repository ref: the server action at the exact commit this action runs from
       with:
         storage-provider: ${{ inputs.storage-provider }}
         storage-path: ${{ inputs.storage-path }}
+        team-id: ${{ inputs.team-id }}
