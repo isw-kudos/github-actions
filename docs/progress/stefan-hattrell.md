@@ -25,6 +25,13 @@
   `npx` line, a Renovate regex manager for those pins, and `!` support in the
   commit-scope hook. v2.0.0 must be re-released via `workflow_dispatch`.
 
+- Consumer rollout of turbo-repo-cache v2.0.0 (draft PRs, all signed):
+  Renovate config with one generic component-pin regex manager, built-in
+  github-actions manager disabled for the package, and no minimumReleaseAge
+  (collab#846, boards#380, huddo-services#191); ci.yml reordered so the
+  action runs after setup-node (collab#847, boards#381, huddo-services#192);
+  docs here updated to the same pattern (#23).
+
 ### Decisions
 - Nested node action instead of shell-only composite purely to get a `post`
   hook (orphaned server on self-hosted runners otherwise). Zero deps so there
