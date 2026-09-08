@@ -1,0 +1,30 @@
+name: Turborepo remote cache server
+description: >-
+  Start a turborepo-remote-cache server on 127.0.0.1 for the rest of the job
+  and export TURBO_API, TURBO_TOKEN and TURBO_TEAM. Stops the server and
+  prints its logs in the post step. Internal building block of the
+  turbo-repo-cache composite action, which adds cloud authentication; use that
+  action unless you are bringing your own storage credentials.
+
+# Zero npm dependencies on purpose: no build or bundle step to maintain. The
+# server package itself is pinned in package.json and installed at runtime
+# with `npm ci`, so npm must be on PATH.
+
+inputs:
+  storage-provider:
+    description: One of s3, google-cloud-storage, azure-blob-storage, local.
+    required: true
+  storage-path:
+    description: >-
+      Bucket name for the cloud providers, or a directory path for local.
+    required: true
+  team-id:
+    description: >-
+      Exported as TURBO_TEAM; namespaces cache entries within the storage path.
+    required: false
+    default: ci
+
+runs:
+  using: node24
+  main: start.cjs
+  post: stop.cjs

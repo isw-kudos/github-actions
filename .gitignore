@@ -31,3 +31,6 @@ share/python-wheels/
 MANIFEST
 .direnv
 .envrc
+
+# Node modules (turbo-repo-cache server is installed at runtime)
+node_modules/

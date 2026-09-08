@@ -39,3 +39,4 @@ jobs:
           required-checks: |
             Run Pre-commit Checks
             Audit workflows
+            Smoke test turbo-repo-cache server
