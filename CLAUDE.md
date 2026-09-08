@@ -54,6 +54,7 @@ Each externally consumed component is independently versioned with a semver tag 
 | Component | Tag prefix |
 |---|---|
 | `docker-build` | `docker-build-v` |
+| `docker-build-ghcr` | `docker-build-ghcr-v` |
 | `ecs-deploy` | `ecs-deploy-v` (also covers `.github/actions/ecs-query/**`) |
 | `determine-image-digest` | `determine-image-digest-v` |
 | `tofu-pre-commit` | `tofu-pre-commit-v` |
@@ -68,6 +69,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | Workflow | Purpose |
 |---|---|
 | `docker-build.yml` | Build & push to ECR with multi-platform support and metadata tagging |
+| `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, checking out private submodules via a GitHub App token when `.gitmodules` exists |
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
