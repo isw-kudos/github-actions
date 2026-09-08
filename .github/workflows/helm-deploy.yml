@@ -1,0 +1,273 @@
+name: Helm Deploy
+
+# One `helm upgrade --install` for every cluster we deploy to. The auth step
+# is selected by `target` (gke: Workload Identity Federation; kubeconfig: a
+# kubeconfig secret, e.g. for on-prem clusters only reachable from a
+# self-hosted runner) and the runner by `runner`, independently - a future
+# aks/eks target is one more auth branch. The chart and values file are read
+# from `config_repository` (the calling repo when empty); a foreign repo is
+# checked out with a GitHub App token whose client id comes from the caller's
+# HUDDO_DEVOPS_GITHUB_APP_ID variable, scoped to that one repository.
+#
+# The calling job must grant exactly `contents: read` and `id-token: write`;
+# a smaller grant fails the run at startup with no logs.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label for the deploy job (a single label, e.g. gcloud, isw, ubuntu-latest)
+        required: true
+        type: string
+      target:
+        description: 'Cluster auth mechanism: gke (Workload Identity Federation) or kubeconfig (KUBECONFIG secret)'
+        required: true
+        type: string
+      environment:
+        description: GitHub Environment the deploy job runs in (deployment history and environment-scoped secrets)
+        required: true
+        type: string
+      config_repository:
+        default: ''
+        description: >-
+          owner/name of the repository holding the chart and values file
+          (e.g. isw-kudos/devops). Empty uses the calling repository at the
+          triggering commit.
+        required: false
+        type: string
+      config_ref:
+        default: ''
+        description: Ref of config_repository to check out; empty uses its default branch
+        required: false
+        type: string
+      chart:
+        description: Chart to deploy, as a path relative to the config checkout or any reference helm accepts
+        required: true
+        type: string
+      values:
+        description: Values file, relative to the config checkout
+        required: true
+        type: string
+      namespace:
+        description: Kubernetes namespace to deploy into
+        required: true
+        type: string
+      release_name:
+        description: Helm release name
+        required: true
+        type: string
+      helm_args:
+        default: ''
+        description: >-
+          Extra helm arguments, whitespace-separated (e.g. --set a=b --set c=d).
+          Values containing spaces are not supported; put them in the values file.
+        required: false
+        type: string
+      wait:
+        default: true
+        description: Wait for the rollout to become Ready and roll back the release if it does not
+        required: false
+        type: boolean
+      timeout:
+        default: 10m
+        description: Helm timeout for the rollout when wait is true
+        required: false
+        type: string
+      gcp_project:
+        default: ''
+        description: 'target=gke: GCP project of the cluster'
+        required: false
+        type: string
+      gke_cluster:
+        default: ''
+        description: 'target=gke: GKE cluster name'
+        required: false
+        type: string
+      gke_location:
+        default: ''
+        description: 'target=gke: GKE cluster location (region or zone)'
+        required: false
+        type: string
+      gcp_workload_identity_provider:
+        default: ''
+        description: 'target=gke: full Workload Identity provider resource name'
+        required: false
+        type: string
+      gcp_service_account:
+        default: ''
+        description: 'target=gke: service account email to impersonate'
+        required: false
+        type: string
+    secrets:
+      HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY:
+        description: >-
+          Private key of the GitHub App used to check out config_repository.
+          Only needed when config_repository is not the calling repository; the
+          app client id is read from the caller's HUDDO_DEVOPS_GITHUB_APP_ID variable.
+        required: false
+      KUBECONFIG:
+        description: 'target=kubeconfig: kubeconfig granting access to the target cluster'
+        required: false
+
+# Two deploys of the same release would race for the helm release lock, and a
+# half-applied release must never be cancelled from under helm. Keyed on the
+# deploy target (environment stands in for the cluster), not the calling
+# workflow, so two caller workflows deploying one release serialise.
+concurrency:
+  group: helm-deploy-${{ inputs.environment }}-${{ inputs.namespace }}-${{ inputs.release_name }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ${{ inputs.runner }}
+    environment: ${{ inputs.environment }}
+    # GitHub validates this grant against the caller's: a caller granting less
+    # fails at startup with no logs, so every entry here is one every caller
+    # must hold.
+    permissions:
+      contents: read # checkout the config repository
+      id-token: write # OIDC token for google-github-actions/auth (target=gke)
+    steps:
+      # `secrets` is not available in step `if:`, so their presence is checked
+      # here as booleans; the secret values themselves never enter this step.
+      # The config repository owner and name are allowlisted before they reach
+      # $GITHUB_OUTPUT and the app-token step.
+      - name: Validate inputs
+        id: validate
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+          CONFIG_REPOSITORY: ${{ inputs.config_repository }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          HAS_APP_KEY: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY != '' }}
+          HAS_KUBECONFIG: ${{ secrets.KUBECONFIG != '' }}
+          GCP_PROJECT: ${{ inputs.gcp_project }}
+          GKE_CLUSTER: ${{ inputs.gke_cluster }}
+          GKE_LOCATION: ${{ inputs.gke_location }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ inputs.gcp_workload_identity_provider }}
+          GCP_SERVICE_ACCOUNT: ${{ inputs.gcp_service_account }}
+        run: |
+          set -euo pipefail
+          failed=false
+          fail() { echo "::error::$1"; failed=true; }
+
+          case "$TARGET" in
+            gke)
+              for var in GCP_PROJECT GKE_CLUSTER GKE_LOCATION GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+                [ -n "${!var}" ] || fail "target=gke requires input $(echo "$var" | tr '[:upper:]' '[:lower:]')"
+              done
+              ;;
+            kubeconfig)
+              [ "$HAS_KUBECONFIG" = true ] || fail "target=kubeconfig requires the KUBECONFIG secret"
+              ;;
+            *)
+              fail "target must be one of: gke, kubeconfig (got '$TARGET')"
+              ;;
+          esac
+
+          foreign=false
+          if [ -n "$CONFIG_REPOSITORY" ] && [ "${CONFIG_REPOSITORY,,}" != "${CALLER_REPOSITORY,,}" ]; then
+            foreign=true
+            if [[ "$CONFIG_REPOSITORY" =~ ^([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)$ ]]; then
+              echo "config_owner=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+              echo "config_name=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            else
+              fail "config_repository must be owner/name (got '$CONFIG_REPOSITORY')"
+            fi
+            [ "$HAS_APP_KEY" = true ] || fail "config_repository '$CONFIG_REPOSITORY' requires the HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY secret"
+          fi
+          echo "foreign=$foreign" >> "$GITHUB_OUTPUT"
+
+          [ "$failed" = false ] || exit 1
+
+      - name: Generate config repository token
+        if: steps.validate.outputs.foreign == 'true'
+        id: app_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HUDDO_DEVOPS_GITHUB_APP_ID }}
+          private-key: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ steps.validate.outputs.config_owner }}
+          repositories: ${{ steps.validate.outputs.config_name }}
+          permission-contents: read
+
+      # The calling repository is deployed at the triggering commit; a foreign
+      # config repository at config_ref or its default branch.
+      - name: Checkout chart and values
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.config_repository || github.repository }}
+          ref: ${{ inputs.config_ref || (steps.validate.outputs.foreign != 'true' && github.sha) || '' }}
+          token: ${{ steps.app_token.outputs.token || github.token }}
+          persist-credentials: false
+
+      - name: Authenticate to GCP
+        if: inputs.target == 'gke'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          project_id: ${{ inputs.gcp_project }}
+          workload_identity_provider: ${{ inputs.gcp_workload_identity_provider }}
+          service_account: ${{ inputs.gcp_service_account }}
+
+      - name: Get GKE credentials
+        if: inputs.target == 'gke'
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3.0.0
+        with:
+          cluster_name: ${{ inputs.gke_cluster }}
+          location: ${{ inputs.gke_location }}
+          project_id: ${{ inputs.gcp_project }}
+
+      - name: Set Kubernetes context
+        if: inputs.target == 'kubeconfig'
+        uses: azure/k8s-set-context@8698eba2499e9012f0d5085f8798077cce4bc526 # v5.0.1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.2.4
+
+      # BUILD_NUMBER only forces a pod rollout when its value changes, so it
+      # uses run_id (unique per run across the repo) rather than run_number,
+      # which is per-workflow: two callers of this workflow keep separate
+      # counters that can land on the same value and silently no-op the
+      # deploy. The podAnnotations copy rolls pods that opt out of global.env
+      # (inheritGlobalEnv: false) - annotations bypass that filter.
+      - name: Deploy
+        shell: bash
+        env:
+          CHART: ${{ inputs.chart }}
+          VALUES: ${{ inputs.values }}
+          NAMESPACE: ${{ inputs.namespace }}
+          RELEASE_NAME: ${{ inputs.release_name }}
+          HELM_ARGS: ${{ inputs.helm_args }}
+          WAIT: ${{ inputs.wait }}
+          TIMEOUT: ${{ inputs.timeout }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # helm_args is split on whitespace only - `set -f` keeps a `*` in a
+          # --set value from expanding against the checkout.
+          set -f
+          read -r -d '' -a extra_args <<< "$HELM_ARGS" || true
+          set +f
+
+          wait_args=()
+          if [ "$WAIT" = true ]; then
+            wait_args=(--wait --rollback-on-failure --timeout "$TIMEOUT")
+          fi
+
+          helm upgrade --install \
+            --namespace "$NAMESPACE" \
+            --values "$VALUES" \
+            --set "global.env.BUILD_NUMBER=$RUN_ID" \
+            --set-string "global.podAnnotations.buildNumber=$RUN_ID" \
+            ${wait_args[@]+"${wait_args[@]}"} \
+            ${extra_args[@]+"${extra_args[@]}"} \
+            "$RELEASE_NAME" "$CHART"

@@ -81,6 +81,53 @@ jobs:
       ssm_parameter_name: /my-app/image-digest
 ```
 
+#### helm-deploy
+Generic `helm upgrade --install`. `target` picks the cluster auth (`gke` via Workload Identity Federation, `kubeconfig` via a `KUBECONFIG` secret, e.g. an on-prem cluster reachable only from a self-hosted runner) and `runner` picks where the job runs. The chart and values file are read from `config_repository` (the calling repo when empty); a different repo is checked out with a GitHub App token scoped to it, client id from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Waits for the rollout and rolls back on failure by default (`wait: false` to opt out). Grant exactly `contents: read` and `id-token: write` on the calling job.
+
+```yaml
+jobs:
+  deploy-gke:
+    permissions:
+      contents: read
+      id-token: write
+    uses: isw-kudos/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
+    with:
+      runner: gcloud
+      target: gke
+      environment: staging
+      gcp_project: ${{ vars.GCP_PROJECT }}
+      gke_cluster: staging
+      gke_location: australia-southeast2
+      gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      config_repository: isw-kudos/devops
+      chart: ./helm-charts/huddo-boards-2.2.0.tgz
+      values: ./boards/staging.yaml
+      namespace: boards
+      release_name: staging-boards
+      helm_args: --set core.image.tag=pr-123
+    secrets:
+      HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
+
+  deploy-onprem:
+    permissions:
+      contents: read
+      id-token: write
+    uses: isw-kudos/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
+    with:
+      runner: isw
+      target: kubeconfig
+      environment: dev8
+      config_repository: isw-kudos/devops
+      chart: ./helm-charts/huddo-cp-1.1.2.tgz
+      values: ./collab/dev8.yaml
+      namespace: connections
+      release_name: huddo-cp
+    secrets:
+      HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
+      KUBECONFIG: ${{ secrets.DEV8_KUBE_CONFIG }}
+```
+
 #### tofu-pre-commit
 A comprehensive pre-commit workflow with OpenTofu/Terraform tooling including Go, Terraform Docs, Trivy, and OpenTofu setup.
 

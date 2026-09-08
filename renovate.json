@@ -115,6 +115,13 @@
       "commitMessageSuffix": ""
     },
     {
+      "description": "Scope helm-deploy workflow dependency updates",
+      "matchFileNames": [".github/workflows/helm-deploy.yml"],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "helm-deploy",
+      "commitMessageSuffix": ""
+    },
+    {
       "description": "Scope ecs-deploy workflow dependency updates",
       "matchFileNames": [".github/workflows/ecs-deploy.yml"],
       "semanticCommitType": "chore",
