@@ -1,56 +1,47 @@
 # Progress — stefan-hattrell
 
-## 2026-09-09
+## 2026-09-09 (retag-images-ghcr)
 ### Accomplished
-- New `helm-deploy` component (`.github/workflows/helm-deploy.yml`): one
-  generic `helm upgrade --install` replacing devops `deploy-gcloud.yaml` and
-  `deploy-helm-in-isw.yaml`. `target` selects auth (`gke` via Workload
-  Identity, `kubeconfig` via a `KUBECONFIG` secret), `runner` selects where it
-  runs, `config_repository` names the repo holding chart + values (devops for
-  now; empty = the caller). GKE identity (project, cluster, location, WIF
-  provider, service account) is passed as inputs, nothing org-specific baked
-  into this public repo.
-- Security baseline: SHA-pinned actions, `permissions: {}` + job grant,
-  `persist-credentials: false`, app token scoped to the one config repo with
-  `permission-contents: read`, allowlisted `owner/name` before it reaches
-  `$GITHUB_OUTPUT`, every `run:` via env vars, per-target input/secret
-  validation with one error per missing item. Zizmor and pre-commit clean.
+- New `retag-images-ghcr` component (`.github/workflows/retag-images-ghcr.yml`):
+  `crane tag` across a newline list of `ghcr.io/<owner>/<image>` names, source
+  → target. Every source digest (and the target's current digest) is resolved
+  in parallel before any write, so a missing image fails with nothing moved;
+  retags run in parallel, every failure is reported, and the job summary
+  tables image / source digest / previous target digest / result. Replaces
+  the devops `retag-image` docker pull-tag-push action used by collab and
+  boards, which pulled every layer and flattened the OCI index (digest
+  changed on promote).
+- Inputs allowlisted (OCI tag and repository regexes, one name per line,
+  source ≠ target); everything reaches `run:` via env. `permissions: {}` +
+  job `packages: write`, concurrency per target tag with no cancel, 10 min
+  timeout. Zizmor clean.
+- Both `run:` blocks exercised against a stub `crane` (happy / missing source
+  / invalid inputs / empty list / one push denied).
 - Full component wiring (releaserc, release workflow, renovate scope rule,
   commit-msg hook case, docs/CLAUDE.md/README) and plan at
-  `docs/plans/2026-09-09-helm-deploy-migration.md` with the eight-caller
-  migration table.
-- Deploy and validate steps unit-tested locally against a stub `helm`
-  (empty/space/newline `helm_args`, glob safety, `wait` on/off, missing
-  inputs, malformed config repo).
+  `docs/plans/2026-09-09-retag-images-ghcr.md`.
+- Consumer wrappers drafted in collab (`retag-images.yml`) and boards
+  (`retag-images.yaml`) worktrees with a placeholder pin; their callers need
+  no change.
 
 ### Decisions
-- Single reusable workflow with a `target` switch, not a composite action:
-  callers are already one `uses:` job and `environment:` inside the workflow
-  already ties the gate and the apply together.
-- `wait` on by default (`--wait --rollback-on-failure --timeout 10m`): a
-  broken image now fails the run and rolls back instead of leaving a
-  half-rolled release. Behaviour change for all eight callers, accepted.
-- Helm pinned to `v4.2.4` (Renovate-tracked). `setup-helm` defaults to
-  `latest`, so callers already run Helm 4; `--atomic` is deprecated there.
-- `environment` is a required input: empty-string `environment:` semantics
-  are unverified and Environments are the "what's deployed" surface.
-- `helm_args` is whitespace-split, not a newline list, so the four
-  `resolve-tags` jobs need no change. Values with spaces are unsupported.
-- Kept the Huddo `BUILD_NUMBER` / `podAnnotations.buildNumber` `--set` lines
-  for parity; harmless for charts that ignore `global`.
+- Named `retag-images-ghcr`, not `retag-images`, and no registry/namespace
+  inputs: auth is the caller's `GITHUB_TOKEN`, which only reaches ghcr.io
+  under the caller's owner. Same convention as `docker-build-ghcr`.
+- Image list is an input; the workflow knows nothing about Huddo. Consumers
+  keep a thin wrapper so the list lives once per repo.
+- Always tag even when already at the source digest (one path; summary says
+  `unchanged`). Cross-registry copy (quay) deliberately out of scope.
 
 ### Next Steps
-- Merge PR → `helm-deploy-v1.0.0`. Set org vars `GCP_PROJECT`,
-  `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT` from devops
-  `deploy-gcloud.yaml`.
-- Consumer PRs per the plan's migration table: boards `deploy-dev.yaml`
-  first (gke), then collab `deploy-dev8.yml` (kubeconfig), then the other six.
-  boards `deploy-dev8-quay.yaml` must drop its trailing-backslash `helmArgs`
-  hack; boards dev/staging/prod must pass `chart` and `namespace` explicitly.
-  Drop the devops deploy-* freeze rules from both `renovate.json` files.
-- Delete `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml` from devops once
-  all eight callers are moved. Later: SOPS or a split for the values files,
-  OCI chart source.
+- Merge → `retag-images-ghcr-v1.0.0`; fill the pin in the collab and boards
+  wrapper PRs and merge them; then delete `retag-image` from devops.
+
+## 2026-09-09 (helm-deploy)
+Added the `helm-deploy` component (one `helm upgrade --install` for GKE via
+Workload Identity and kubeconfig targets, replacing devops `deploy-gcloud.yaml`
+/ `deploy-helm-in-isw.yaml`) with full component wiring and a plan carrying
+the eight-caller migration table; `wait` + rollback on by default.
 
 ## 2026-09-08
 Migrated devops `docker-build-generic.yml` here as the `docker-build-ghcr`

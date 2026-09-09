@@ -35,6 +35,8 @@ while IFS= read -r f; do
       required_scopes="$required_scopes ecs-deploy" ;;
     .github/workflows/helm-deploy.yml)
       required_scopes="$required_scopes helm-deploy" ;;
+    .github/workflows/retag-images-ghcr.yml)
+      required_scopes="$required_scopes retag-images-ghcr" ;;
     .github/workflows/tofu-pre-commit.yml)
       required_scopes="$required_scopes tofu-pre-commit" ;;
     .github/actions/turbo-repo-cache/*|.github/workflows/turbo-repo-cache-test.yml)

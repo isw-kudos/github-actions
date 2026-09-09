@@ -1,0 +1,199 @@
+name: Retag Images (ghcr.io)
+
+# Points `target_tag` at whatever `source_tag` is, for every image listed,
+# without pulling a single layer. `crane tag` re-PUTs the source manifest
+# under the new tag on the registry side, so the target is byte-identical to
+# the source: same digest, and an OCI index (multi-platform manifests,
+# provenance attestations) survives intact. A `docker pull` / `docker tag` /
+# `docker push` round trip, which this replaces, downloads every layer, keeps
+# only the runner's platform, and changes the digest.
+#
+# Every source tag is resolved BEFORE anything is written, so a missing image
+# fails the run with nothing moved instead of leaving the target tag half
+# promoted. The retags then run in parallel and every failure is reported,
+# not just the first. The job summary records each image's source digest and
+# what the target tag pointed at before, which is the thing to read before
+# deciding whether to roll back.
+#
+# Authenticates to ghcr.io with the calling repository's GITHUB_TOKEN, so the
+# calling repository needs write access to every package in `images` (org
+# packages: Package settings -> Manage Actions access). The calling job must
+# grant `packages: write`; a smaller grant fails the run at startup with no
+# logs.
+
+on:
+  workflow_call:
+    inputs:
+      images:
+        description: >-
+          Image names under ghcr.io/<repository owner>, one per line
+          (e.g. huddo-core). Blank lines are ignored.
+        required: true
+        type: string
+      source_tag:
+        description: Tag to read on every image
+        required: true
+        type: string
+      target_tag:
+        description: Tag to point at the source tag's manifest on every image
+        required: true
+        type: string
+
+permissions: {}
+
+# Two runs moving the same tag at once (a promote and a rollback dispatched
+# together) would race; serialise per target tag and never cancel one in
+# flight. `github.repository_owner` here is the caller's, i.e. the ghcr.io
+# namespace being written to.
+concurrency:
+  group: retag-images-ghcr-${{ github.repository_owner }}-${{ inputs.target_tag }}
+  cancel-in-progress: false
+
+jobs:
+  retag:
+    name: ${{ inputs.source_tag }} -> ${{ inputs.target_tag }}
+    runs-on: ubuntu-latest
+    # A retag is a handful of manifest requests per image; anything near this
+    # long is a hung registry call, not work.
+    timeout-minutes: 10
+    permissions:
+      packages: write # crane pushes the target tag to ghcr.io
+    steps:
+      - name: Install crane
+        uses: iarekylew00t/crane-installer@8efb0e525fa83ad39276d294d67dda1cc85733d9 # v4.0.15
+        with:
+          verify: true
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check sources
+        # Inputs arrive as env vars, never expanded inside the script; they
+        # are also allowlisted here so a typo surfaces as a clear error rather
+        # than a registry 4xx, and so nothing but a valid OCI name/tag ever
+        # reaches crane.
+        env:
+          IMAGES: ${{ inputs.images }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+        run: |
+          set -euo pipefail
+          # ghcr.io namespaces are lowercase even when the GitHub owner is not
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          STATE="$RUNNER_TEMP/retag"
+          mkdir -p "$STATE"
+
+          fail=0
+          tag_re='^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$'
+          for pair in "source_tag=$SOURCE_TAG" "target_tag=$TARGET_TAG"; do
+            if [[ ! "${pair#*=}" =~ $tag_re ]]; then
+              echo "::error::${pair%%=*} '${pair#*=}' is not a valid OCI tag"
+              fail=1
+            fi
+          done
+          if [[ "$SOURCE_TAG" == "$TARGET_TAG" ]]; then
+            echo "::error::source_tag and target_tag are both '$SOURCE_TAG'"
+            fail=1
+          fi
+
+          images=()
+          image_re='^[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$'
+          # `read` with the default IFS trims the line; anything left after the
+          # first word means two names were put on one line.
+          while read -r name rest; do
+            [[ -z "$name" ]] && continue
+            if [[ -n "$rest" || ! "$name" =~ $image_re ]]; then
+              echo "::error::'$name${rest:+ $rest}' is not a valid image name (one lowercase OCI repository name per line)"
+              fail=1
+              continue
+            fi
+            images+=("$name")
+          done <<< "$IMAGES"
+          if [[ ${#images[@]} -eq 0 ]]; then
+            echo "::error::images is empty"
+            fail=1
+          fi
+          [[ $fail -eq 0 ]] || exit 1
+          printf '%s\n' "${images[@]}" > "$STATE/images"
+
+          # Resolve every source digest, and what the target currently points
+          # at, in parallel. A target that does not exist yet (first snapshot)
+          # is fine; any other target error will recur, and be reported, when
+          # the retag step writes to it.
+          resolve() {
+            local i=$1 image=$2 ref="ghcr.io/$OWNER/$2"
+            crane digest "$ref:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err" || return 1
+            crane digest "$ref:$TARGET_TAG" > "$STATE/$i.target" 2>/dev/null || echo "(none)" > "$STATE/$i.target"
+          }
+          pids=()
+          for i in "${!images[@]}"; do
+            resolve "$i" "${images[$i]}" &
+            pids+=("$!")
+          done
+          missing=0
+          for i in "${!images[@]}"; do
+            image="${images[$i]}"
+            if wait "${pids[$i]}"; then
+              printf '%-40s %s\n' "$image:$SOURCE_TAG" "$(<"$STATE/$i.source")"
+            else
+              err=$(<"$STATE/$i.source.err")
+              echo "::error::ghcr.io/$OWNER/$image:$SOURCE_TAG: ${err//$'\n'/ }"
+              missing=$((missing + 1))
+            fi
+          done
+          if (( missing > 0 )); then
+            echo "::error::$missing of ${#images[@]} source image(s) could not be resolved; nothing was retagged"
+            exit 1
+          fi
+
+      - name: Retag
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+        run: |
+          set -euo pipefail
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          STATE="$RUNNER_TEMP/retag"
+          mapfile -t images < "$STATE/images"
+
+          pids=()
+          for i in "${!images[@]}"; do
+            crane tag "ghcr.io/$OWNER/${images[$i]}:$SOURCE_TAG" "$TARGET_TAG" > "$STATE/$i.tag.log" 2>&1 &
+            pids+=("$!")
+          done
+
+          # 12 hex chars is enough to tell digests apart at a glance; the full
+          # digests are in the "Check sources" step log.
+          short() { if [[ $1 == sha256:* ]]; then echo "${1:0:19}"; else echo "$1"; fi; }
+          summary="$STATE/summary.md"
+          {
+            echo "### Retag \`$SOURCE_TAG\` -> \`$TARGET_TAG\` on ghcr.io/$OWNER"
+            echo
+            echo "| Image | \`$SOURCE_TAG\` digest | \`$TARGET_TAG\` was | Result |"
+            echo "|---|---|---|---|"
+          } > "$summary"
+          failed=0
+          for i in "${!images[@]}"; do
+            image="${images[$i]}"
+            source=$(<"$STATE/$i.source")
+            previous=$(<"$STATE/$i.target")
+            if wait "${pids[$i]}"; then
+              if [[ "$previous" == "$source" ]]; then result="unchanged"; else result="updated"; fi
+              echo "$image: $result"
+            else
+              result="**failed**"
+              failed=$((failed + 1))
+              err=$(<"$STATE/$i.tag.log")
+              echo "::error::ghcr.io/$OWNER/$image:$TARGET_TAG: ${err//$'\n'/ }"
+            fi
+            echo "| \`$image\` | \`$(short "$source")\` | \`$(short "$previous")\` | $result |" >> "$summary"
+          done
+          cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          if (( failed > 0 )); then
+            echo "::error::$failed of ${#images[@]} image(s) failed to retag; the job summary shows which tags moved"
+            exit 1
+          fi
