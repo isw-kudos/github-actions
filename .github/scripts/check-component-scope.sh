@@ -33,6 +33,8 @@ while IFS= read -r f; do
       required_scopes="$required_scopes docker-build-ghcr" ;;
     .github/workflows/ecs-deploy.yml|.github/actions/ecs-query/*)
       required_scopes="$required_scopes ecs-deploy" ;;
+    .github/workflows/helm-deploy.yml)
+      required_scopes="$required_scopes helm-deploy" ;;
     .github/workflows/tofu-pre-commit.yml)
       required_scopes="$required_scopes tofu-pre-commit" ;;
     .github/actions/turbo-repo-cache/*|.github/workflows/turbo-repo-cache-test.yml)

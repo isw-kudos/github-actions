@@ -1,52 +1,62 @@
 # Progress — stefan-hattrell
 
-## 2026-09-08
+## 2026-09-09
 ### Accomplished
-- Migrated `isw-kudos/devops` `docker-build-generic.yml` into this repo as the
-  `docker-build-ghcr` component (`.github/workflows/docker-build-ghcr.yml`),
-  inputs name-for-name identical so the 20 callers in boards (7), collab (9)
-  and huddo-services (4) change only their `uses:` line.
-- Hardening vs the original: SHA-pinned actions, `permissions: {}` + job grant,
-  `persist-credentials: false`, app token scoped to the caller plus its
-  same-owner submodules (parsed from `.gitmodules`, allowlisted) with
-  `permission-contents: read`, declared `secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY`
-  so callers can drop `secrets: inherit`, `outputs.digest`, concurrency group
-  keyed by image, QEMU only for non-amd64.
-- Full component wiring: `.releaserc.js`, `release-docker-build-ghcr.yml`,
-  renovate scope rule, commit-msg hook case, docs/CLAUDE.md/README tables.
-- Plan: `docs/plans/2026-09-08-docker-build-ghcr-migration.md`. Independent
-  adversarial review found the detect pipeline failed under `pipefail` on an
-  empty match; fixed and re-verified by running the extracted step against
-  boards' real `.gitmodules`.
+- New `helm-deploy` component (`.github/workflows/helm-deploy.yml`): one
+  generic `helm upgrade --install` replacing devops `deploy-gcloud.yaml` and
+  `deploy-helm-in-isw.yaml`. `target` selects auth (`gke` via Workload
+  Identity, `kubeconfig` via a `KUBECONFIG` secret), `runner` selects where it
+  runs, `config_repository` names the repo holding chart + values (devops for
+  now; empty = the caller). GKE identity (project, cluster, location, WIF
+  provider, service account) is passed as inputs, nothing org-specific baked
+  into this public repo.
+- Security baseline: SHA-pinned actions, `permissions: {}` + job grant,
+  `persist-credentials: false`, app token scoped to the one config repo with
+  `permission-contents: read`, allowlisted `owner/name` before it reaches
+  `$GITHUB_OUTPUT`, every `run:` via env vars, per-target input/secret
+  validation with one error per missing item. Zizmor and pre-commit clean.
+- Full component wiring (releaserc, release workflow, renovate scope rule,
+  commit-msg hook case, docs/CLAUDE.md/README) and plan at
+  `docs/plans/2026-09-09-helm-deploy-migration.md` with the eight-caller
+  migration table.
+- Deploy and validate steps unit-tested locally against a stub `helm`
+  (empty/space/newline `helm_args`, glob safety, `wait` on/off, missing
+  inputs, malformed config repo).
 
 ### Decisions
-- Separate component rather than a registry switch on the ECR `docker-build.yml`:
-  that workflow is `vars`-driven and AWS-shaped; a mode flag would double its
-  inputs and force a major on the erc-* consumers.
-- Kept the two-checkout dance: `secrets` is unavailable in step `if:`, so
-  `.gitmodules` on disk stays the signal for needing the app token.
-- `vars.HUDDO_DEVOPS_GITHUB_APP_ID` stays a `vars` lookup (resolves against the
-  caller's org); an input default cannot reference `vars`.
-
-- PR #24 merged, but `release-docker-build-ghcr` failed in `generateNotes`:
-  Renovate #21 had bumped `conventional-changelog-conventionalcommits` to v10,
-  which needs `conventional-changelog-writer@9`, while
-  `@semantic-release/release-notes-generator` 14.x (semantic-release 25)
-  bundles writer 8. Pinned the preset back to 9.3.1 in all eight release
-  workflows and added a Renovate `allowedVersions: "<10"` hold; verified with
-  a local `semantic-release --dry-run` that now reaches "Published release 1.0.0".
+- Single reusable workflow with a `target` switch, not a composite action:
+  callers are already one `uses:` job and `environment:` inside the workflow
+  already ties the gate and the apply together.
+- `wait` on by default (`--wait --rollback-on-failure --timeout 10m`): a
+  broken image now fails the run and rolls back instead of leaving a
+  half-rolled release. Behaviour change for all eight callers, accepted.
+- Helm pinned to `v4.2.4` (Renovate-tracked). `setup-helm` defaults to
+  `latest`, so callers already run Helm 4; `--atomic` is deprecated there.
+- `environment` is a required input: empty-string `environment:` semantics
+  are unverified and Environments are the "what's deployed" surface.
+- `helm_args` is whitespace-split, not a newline list, so the four
+  `resolve-tags` jobs need no change. Values with spaces are unsupported.
+- Kept the Huddo `BUILD_NUMBER` / `podAnnotations.buildNumber` `--set` lines
+  for parity; harmless for charts that ignore `global`.
 
 ### Next Steps
-- Merge the preset-pin fix, then `gh workflow run release-docker-build-ghcr.yml`
-  (the release workflow's `paths:` filter does not cover `release-*.yml`, so
-  the fix landing on main will not re-trigger it).
-- Drop the Renovate hold once semantic-release depends on
-  release-notes-generator 15 (writer 9).
-- Re-point one huddo-services caller first (no submodule, no secret), then a
-  boards caller with the explicit `secrets:` mapping and its
-  `zizmor: ignore[secrets-inherit]` removed, then the remaining 18.
-- Once all callers are moved, delete `docker-build-generic.yml` from devops.
-- Next devops workflows to migrate: continue the same pattern.
+- Merge PR → `helm-deploy-v1.0.0`. Set org vars `GCP_PROJECT`,
+  `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT` from devops
+  `deploy-gcloud.yaml`.
+- Consumer PRs per the plan's migration table: boards `deploy-dev.yaml`
+  first (gke), then collab `deploy-dev8.yml` (kubeconfig), then the other six.
+  boards `deploy-dev8-quay.yaml` must drop its trailing-backslash `helmArgs`
+  hack; boards dev/staging/prod must pass `chart` and `namespace` explicitly.
+  Drop the devops deploy-* freeze rules from both `renovate.json` files.
+- Delete `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml` from devops once
+  all eight callers are moved. Later: SOPS or a split for the values files,
+  OCI chart source.
+
+## 2026-09-08
+Migrated devops `docker-build-generic.yml` here as the `docker-build-ghcr`
+component (PR #24, `docker-build-ghcr-v1.0.0`), then pinned the
+`conventionalcommits` preset below 10 across all release workflows after the
+first release failed in `generateNotes`. Consumer re-pointing still pending.
 
 ## 2026-09-08 (earlier)
 Replaced the unmaintained turbo-repo-cache upstream with an in-house node24

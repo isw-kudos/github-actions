@@ -55,6 +55,7 @@ Each externally consumed component is independently versioned with a semver tag 
 |---|---|
 | `docker-build` | `docker-build-v` |
 | `docker-build-ghcr` | `docker-build-ghcr-v` |
+| `helm-deploy` | `helm-deploy-v` |
 | `ecs-deploy` | `ecs-deploy-v` (also covers `.github/actions/ecs-query/**`) |
 | `determine-image-digest` | `determine-image-digest-v` |
 | `tofu-pre-commit` | `tofu-pre-commit-v` |
@@ -71,6 +72,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `docker-build.yml` | Build & push to ECR with multi-platform support and metadata tagging |
 | `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, checking out private submodules via a GitHub App token when `.gitmodules` exists |
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
+| `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster, chart and values read from a config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |
