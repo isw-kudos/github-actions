@@ -84,6 +84,16 @@ jobs:
 #### helm-deploy
 Generic `helm upgrade --install`. `target` picks the cluster auth (`gke` via Workload Identity Federation, `kubeconfig` via a `KUBECONFIG` secret, e.g. an on-prem cluster reachable only from a self-hosted runner) and `runner` picks where the job runs. The chart and values file are read from `config_repository` (the calling repo when empty); a different repo is checked out with a GitHub App token scoped to it, client id from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Waits for the rollout and rolls back on failure by default (`wait: false` to opt out). Grant exactly `contents: read` and `id-token: write` on the calling job.
 
+The deploy job runs inside the GitHub Environment named by `environment`, so each run is recorded under the caller's Environments tab. GitHub creates the environment on first use with no restrictions; since these jobs change real infrastructure, restrict each one so only `main` can deploy to it (deployment branch policies are available on Team plan private repos; required reviewers are not):
+
+```bash
+gh api -X PUT repos/<owner>/<repo>/environments/<env> \
+  --input - <<< '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
+gh api -X POST repos/<owner>/<repo>/environments/<env>/deployment-branch-policies -f name=main -f type=branch
+```
+
+A `workflow_dispatch` from any other branch then fails at job start with "Branch ... is not allowed to deploy to <env>" before anything is checked out.
+
 ```yaml
 jobs:
   deploy-gke:

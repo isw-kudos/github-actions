@@ -188,6 +188,11 @@ private caller's, so the "no public workloads on self-hosted runners" rule holds
   with it, so a chart resource that never reaches kstatus Current (an unbound
   PVC, a stuck hook Job) fails and rolls back every run. All eight current
   callers have existing releases; only brand-new environments meet the first.
+- **Environments are restricted to `main` by policy, not by the workflow.** The
+  workflow cannot know which branches a caller trusts, so the restriction lives
+  on the environment (deployment branch policy `main`, set via the API; the
+  README shows the commands). Verified on boards `dev8` on 2026-09-09: Team
+  plan accepts branch policies; required reviewers remain Enterprise-only.
 - Deferred: OCI chart source (`oci://quay.io/huddo/<chart> --version`) — passes
   through `chart` + `helm_args` today, revisit with devops `FUTURE-chart-release-pipeline.md`;
   multiple `--values` files (needed once secret and non-secret values split);
