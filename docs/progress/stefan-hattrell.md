@@ -39,18 +39,25 @@
 - Kept the Huddo `BUILD_NUMBER` / `podAnnotations.buildNumber` `--set` lines
   for parity; harmless for charts that ignore `global`.
 
+### Consumer migration (same day)
+- `helm-deploy-v1.0.0` released (#35). Org vars `GCP_PROJECT`,
+  `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT` created, scoped to
+  boards and collab.
+- boards: dev8 (#386, merged; live run = helm revision 136) and staging/prod
+  (#390, merged). The dev environment was retired instead of migrated (#387):
+  `:dev` images only ever came from the dead `dev` branch.
+- collab: dev8, isw, demo (#860, open).
+- GitHub Environments `dev8`/`staging`/`production` (boards) and
+  `dev8`/`isw`/`demo` (collab) created with a `main`-only deployment branch
+  policy; verified a feature-branch dispatch is rejected at job start. Caller
+  docs live in each repo's `docs/DEPLOYMENT(S).md`, not here (#38).
+
 ### Next Steps
-- Merge PR → `helm-deploy-v1.0.0`. Set org vars `GCP_PROJECT`,
-  `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT` from devops
-  `deploy-gcloud.yaml`.
-- Consumer PRs per the plan's migration table: boards `deploy-dev.yaml`
-  first (gke), then collab `deploy-dev8.yml` (kubeconfig), then the other six.
-  boards `deploy-dev8-quay.yaml` must drop its trailing-backslash `helmArgs`
-  hack; boards dev/staging/prod must pass `chart` and `namespace` explicitly.
-  Drop the devops deploy-* freeze rules from both `renovate.json` files.
+- Merge collab #860, dispatch dev8 → demo → ISW from `main`.
 - Delete `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml` from devops once
-  all eight callers are moved. Later: SOPS or a split for the values files,
-  OCI chart source.
+  #860 is in; the only remaining devops refs are `retag-image` and the
+  `build-*` pins.
+- Later: SOPS or a split for the values files, OCI chart source.
 
 ## 2026-09-08
 Migrated devops `docker-build-generic.yml` here as the `docker-build-ghcr`
