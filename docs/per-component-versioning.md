@@ -13,7 +13,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | Component | Tag prefix | Watched paths | Consumers |
 |---|---|---|---|
 | docker-build | `docker-build-v` | `.github/workflows/docker-build.yml` | erc-api-v1, erc-web, erc-pdf |
-| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (migrating from `isw-kudos/devops` `docker-build-generic.yml`) |
+| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (replaced `isw-kudos/devops` `docker-build-generic.yml`) |
 | helm-deploy | `helm-deploy-v` | `.github/workflows/helm-deploy.yml` | boards, collab (migrating from `isw-kudos/devops` `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml`) |
 | ecs-deploy | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | erc-api-v1, erc-web, erc-pdf |
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |

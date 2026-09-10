@@ -29,8 +29,11 @@ on:
         required: true
         type: string
       tag:
-        description: Image tag to push
-        required: true
+        description: >-
+          Deprecated. Tags are generated from the event (branch name, pr-N,
+          sha-<commit>); a value here is pushed as one more tag so callers
+          written for v1.0.0 keep working. New callers should not set it.
+        required: false
         type: string
     secrets:
       HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY:
@@ -43,11 +46,18 @@ on:
       digest:
         description: The pushed image digest
         value: ${{ jobs.build.outputs.digest }}
+      tags:
+        description: The pushed image references, one ghcr.io/<owner>/<image>:<tag> per line
+        value: ${{ jobs.build.outputs.tags }}
 
 # Keyed by image so a caller workflow may build several images from one ref
-# without the jobs cancelling each other. `github.workflow` is the caller's.
+# without the jobs cancelling each other (`github.workflow` is the caller's).
+# Pull requests queue per ref and cancel the superseded build; every other
+# event queues per commit, because GitHub keeps only one pending run per group
+# and drops the older one, and a dropped push would leave that commit with no
+# `sha-<commit>` tag (which is what a promote resolves).
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.image }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.image }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions: {}
@@ -65,6 +75,7 @@ jobs:
       packages: write # push the image and build cache to ghcr.io
     outputs:
       digest: ${{ steps.build_push.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,6 +142,34 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # One tag set for every caller, derived from the event: the branch name
+      # on a branch push (`main`, `dev`), `pr-N` on a pull request, the git tag
+      # on a tag push, and always `sha-<full commit sha>` so a manifest can be
+      # found by the commit that built it (collab and boards promote the
+      # huddo-services images by that tag, from their submodule pin). No
+      # `latest` and no date tag: nothing deploys either, and a date is not
+      # unique per build while the `created` label already records it. On a
+      # pull request the sha is the PR head, a commit that exists in the
+      # repository, not the ephemeral refs/pull/N/merge commit.
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          DOCKER_METADATA_PR_HEAD_SHA: true
+          # With provenance on (the build-push default) the tag points at an
+          # OCI index, so put the annotations there too; that is what a
+          # registry browser or `crane manifest <image>:<tag>` shows.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
+          flavor: latest=false
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=ref,event=tag
+            type=sha,format=long
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+
       - name: Build & Push Docker Image
         id: build_push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -146,4 +185,6 @@ jobs:
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}-buildcache:latest,mode=max,oci-mediatypes=true,image-manifest=true
           file: ${{ inputs.dockerfile_path }}
           platforms: ${{ inputs.architecture }}
-          tags: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}:${{ inputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
