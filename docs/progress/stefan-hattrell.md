@@ -49,6 +49,9 @@
   re-based onto main by patch). A second fresh-context review found only doc
   fixes, applied.
 
+- Pinning paused at Stefan's request: collab#874 / boards#400 back to draft,
+  huddo-services bump reduced to pin + `tag:` removal (push `paths:` kept).
+
 ### Next Steps
 - Merge #52 and #53; after each release fill the placeholder pins and open
   the six consumer PRs (build bumps, then cleanup schedules).

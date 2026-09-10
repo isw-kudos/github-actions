@@ -190,7 +190,10 @@ to the main-to-prod / main-to-cloud job only.
       callers chain their jobs with `needs` because GitHub keeps one pending job
       per group._
 - [ ] 4. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ huddo-services: bump the four `build-*.yaml` to `docker-build-ghcr-v1.1.0`,
-      drop `tag:`, drop `paths:` on `push` (keep on `pull_request`). Depends on 2 released.
+      drop `tag:`. Depends on 2 released.
+      _deviation: the "drop `paths:` on push" half is parked with the pinning
+      work (see 7/8); it only existed to guarantee a `sha-` tag on every image
+      for every main commit._
 - [ ] 5. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ collab: bump nine `build-*.yml`, drop `tag:`; migrate `build-search.yml`
       to the component (drop `id-token: write` and `secrets: inherit`); delete
       the devops freeze rule in `renovate.json` and the `secrets: inherit`
@@ -200,10 +203,10 @@ to the main-to-prod / main-to-cloud job only.
 - [ ] 6. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ boards: bump seven `build-*.yaml`, drop `tag:`; delete the dead
       `build-*.yaml` devops freeze rule and the skill exception. Depends on 2
       released. _deviation: stacked on boards#392 for the same reason as 5._
-- [x] 7. collab#874: promote by pin (wrapper + `promote-main-to-prod.yml`).
+- [~] 7. collab#874 (draft, PAUSED 2026-09-10): promote by pin (wrapper + `promote-main-to-prod.yml`).
       _deviation: collab#866 squash-merged first, so this is based on main, not
       stacked; merge gate: a huddo-services pin built after step 4._
-- [x] 8. boards#400: promote by pin (wrapper + `promote-main-to-cloud.yaml`).
+- [~] 8. boards#400 (draft, PAUSED 2026-09-10): promote by pin (wrapper + `promote-main-to-cloud.yaml`).
       _deviation: same as 7 (boards#392 merged first); also reworded the
       `docker-compose.smoke.yaml` header, which asserted the pre-pin behaviour._
 - [ ] 9. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ huddo-services / collab / boards: `cleanup-images.y(a)ml` scheduled
@@ -243,6 +246,12 @@ gh workflow run cleanup-images.yaml -R isw-kudos/huddo-services -f dry_run=true
 ```
 
 ## Notes / Deferred
+
+- **Pinning paused (2026-09-10).** Focus is the metadata-action tags and the
+  cleanup component; collab#874 and boards#400 stay open as drafts and the
+  huddo-services `paths:` change is parked with them. Everything else in this
+  plan stands; the `sha-` tags still ship so the pinning work can resume
+  without a component change.
 
 - **metadata-action, not a caller expression.** Every caller had the same
   expression; the component owns the tag set now so a new tag (the commit tag)
