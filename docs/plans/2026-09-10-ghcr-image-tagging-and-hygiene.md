@@ -249,6 +249,17 @@ gh workflow run cleanup-images.yaml -R isw-kudos/huddo-services -f dry_run=true
 # read the job log: per package "would delete N untagged / N tagged", validate: no missing children
 ```
 
+### Verified 2026-09-10 on the first PR builds
+
+| image | tags on the new build | index `revision` | config labels |
+|---|---|---|---|
+| `user` (huddo-services#198) | `pr-198`, `sha-9c39ba38…` (same digest) | `9c39ba38…` | created, description, revision, source, title, url, version=`pr-198` |
+| `huddo-search` (collab#877, first build on the component) | `pr-877`, `sha-b911d35a…` | `b911d35a…` | same set |
+| `boards-core` (boards#401) | `pr-401`, `sha-6e2d5503…` | `6e2d5503…` | same set |
+
+Every other build on the three PRs succeeded too (boards boot-smoke included).
+Hygiene dry-run counts: pending the cleanup PRs merging and a dispatch.
+
 ## Notes / Deferred
 
 - **Pinning paused (2026-09-10).** Focus is the metadata-action tags and the
