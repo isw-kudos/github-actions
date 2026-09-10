@@ -52,9 +52,12 @@
 - Pinning paused at Stefan's request: collab#874 / boards#400 back to draft,
   huddo-services bump reduced to pin + `tag:` removal (push `paths:` kept).
 
+- #52 -> `docker-build-ghcr-v1.1.0`, #53 -> `cleanup-images-ghcr-v1.0.0`
+  (re-dispatched after the behind-remote race). Consumer PRs opened:
+  huddo-services#198/#199, collab#877/#878, boards#401/#402.
+
 ### Next Steps
-- Merge #52 and #53; after each release fill the placeholder pins and open
-  the six consumer PRs (build bumps, then cleanup schedules).
+- Merge the six consumer PRs (build bumps, then cleanup schedules).
 - Dispatch each `cleanup-images` workflow as a dry run, review counts, then
   flip the scheduled `dry_run` per repo.
 - Follow-ups: delete collab's devops freeze rule once #866 and the
