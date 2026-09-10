@@ -177,10 +177,10 @@ to the main-to-prod / main-to-cloud job only.
 ## Implementation Order
 
 - [x] 1. Plan committed (this file), progress log entry.
-- [x] 2. `docker-build-ghcr.yml`: metadata-action step, `tag` optional, labels +
+- [x] 2. (PR #52) `docker-build-ghcr.yml`: metadata-action step, `tag` optional, labels +
       annotations, `tags` output; README + `docs/per-component-versioning.md`.
       PR title `feat(docker-build-ghcr): generate tags and OCI labels with metadata-action`.
-- [x] 3. `cleanup-images-ghcr.yml` (no hand-seeded tag: semantic-release cuts
+- [x] 3. (PR #53) `cleanup-images-ghcr.yml` (no hand-seeded tag: semantic-release cuts
       `cleanup-images-ghcr-v1.0.0` from the first scoped `feat` commit, as it did
       for `retag-images-ghcr`) + `releases/cleanup-images-ghcr/.releaserc.js`
       + `release-cleanup-images-ghcr.yml` + renovate rule + scope-hook case +
@@ -200,8 +200,12 @@ to the main-to-prod / main-to-cloud job only.
 - [ ] 6. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ boards: bump seven `build-*.yaml`, drop `tag:`; delete the dead
       `build-*.yaml` devops freeze rule and the skill exception. Depends on 2
       released. _deviation: stacked on boards#392 for the same reason as 5._
-- [ ] 7. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ collab: promote by pin (wrapper + `promote-main-to-prod.yml`), stacked on collab#866.
-- [ ] 8. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ boards: promote by pin (wrapper + `promote-main-to-cloud.yaml`), stacked on boards#392.
+- [x] 7. collab#874: promote by pin (wrapper + `promote-main-to-prod.yml`).
+      _deviation: collab#866 squash-merged first, so this is based on main, not
+      stacked; merge gate: a huddo-services pin built after step 4._
+- [x] 8. boards#400: promote by pin (wrapper + `promote-main-to-cloud.yaml`).
+      _deviation: same as 7 (boards#392 merged first); also reworded the
+      `docker-compose.smoke.yaml` header, which asserted the pre-pin behaviour._
 - [ ] 9. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ huddo-services / collab / boards: `cleanup-images.y(a)ml` scheduled
       workflow, dry-run. Depends on 3 released.
 - [ ] 10. Run each cleanup workflow by dispatch (dry run), paste the "would

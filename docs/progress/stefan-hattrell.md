@@ -43,10 +43,15 @@
 - Promote runs the huddo-services retag first so a never-built pin fails
   before any app tag moves.
 
+- PRs open: github-actions #52 (docker-build-ghcr) and #53
+  (cleanup-images-ghcr), collab#874 and boards#400 (promote by pin; collab#866
+  and boards#392 squash-merged first, so the four stacked worktrees were
+  re-based onto main by patch). A second fresh-context review found only doc
+  fixes, applied.
+
 ### Next Steps
-- Approve + open: github-actions PRs (docker-build-ghcr, cleanup-images-ghcr);
-  after each release fill the placeholder pins and open the consumer PRs;
-  merge collab#866 / boards#392 first so the promote-by-pin PRs retarget.
+- Merge #52 and #53; after each release fill the placeholder pins and open
+  the six consumer PRs (build bumps, then cleanup schedules).
 - Dispatch each `cleanup-images` workflow as a dry run, review counts, then
   flip the scheduled `dry_run` per repo.
 - Follow-ups: delete collab's devops freeze rule once #866 and the
