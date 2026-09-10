@@ -171,6 +171,13 @@
       "commitMessageSuffix": ""
     },
     {
+      "description": "Scope cleanup-images-ghcr workflow dependency updates",
+      "matchFileNames": [".github/workflows/cleanup-images-ghcr.yml"],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "cleanup-images-ghcr",
+      "commitMessageSuffix": ""
+    },
+    {
       "description": "conventional-changelog-conventionalcommits v10 requires conventional-changelog-writer@9, but @semantic-release/release-notes-generator 14.x (what semantic-release 25 depends on) bundles writer 8, so generateNotes throws 'Missing helper' and every component release fails (broke docker-build-ghcr-v1.0.0 after #21). Hold the preset below 10 until release-notes-generator 15 ships and semantic-release depends on it, then drop this rule.",
       "matchPackageNames": ["conventional-changelog-conventionalcommits"],
       "allowedVersions": "<10"

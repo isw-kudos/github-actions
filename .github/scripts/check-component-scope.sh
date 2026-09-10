@@ -25,6 +25,8 @@ while IFS= read -r f; do
   case "$f" in
     .github/workflows/claude-code-review.yml)
       required_scopes="$required_scopes claude-code-review" ;;
+    .github/workflows/cleanup-images-ghcr.yml)
+      required_scopes="$required_scopes cleanup-images-ghcr" ;;
     .github/workflows/determine-image-digest.yml)
       required_scopes="$required_scopes determine-image-digest" ;;
     .github/workflows/docker-build.yml)
