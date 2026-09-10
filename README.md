@@ -146,6 +146,24 @@ jobs:
     uses: isw-kudos/github-actions/.github/workflows/determine-image-digest.yml@<dummy hash>
 ```
 
+#### retag-images-ghcr
+Points `target_tag` at `source_tag` on every listed `ghcr.io/<owner>/<image>` with `crane tag`: no layers are pulled and the manifest is re-pointed as is, so an OCI index (multi-platform, provenance) keeps its digest where a docker pull/push would flatten it. Every source digest is resolved before any tag moves, so a missing image fails the run with nothing changed, and the tag is then written by that digest. The job summary records each image's source digest and what the target pointed at before. Authenticates with the calling repo's `GITHUB_TOKEN`, so that repo needs write access to every package listed. Grant exactly `packages: write` on the calling job; if the caller is itself a reusable wrapper (collab and boards keep their image list in one), every job along the chain needs that grant.
+
+```yaml
+jobs:
+  promote:
+    permissions:
+      packages: write
+    uses: isw-kudos/github-actions/.github/workflows/retag-images-ghcr.yml@<dummy hash>
+    with:
+      source_tag: main
+      target_tag: prod
+      images: |
+        huddo-core
+        huddo-wikis
+        user
+```
+
 #### turbo-repo-cache
 Composite action. Authenticates to GCP via OIDC and starts a local Turborepo remote-cache server backed by a GCS bucket. Subsequent `turbo` commands in the job use the local cache.
 
