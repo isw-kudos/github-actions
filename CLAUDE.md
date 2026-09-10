@@ -72,7 +72,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | Workflow | Purpose |
 |---|---|
 | `docker-build.yml` | Build & push to ECR with multi-platform support and metadata tagging |
-| `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, checking out private submodules via a GitHub App token when `.gitmodules` exists |
+| `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, tagged `<branch>` / `pr-N` plus `sha-<commit>` with OCI labels via `docker/metadata-action`, checking out private submodules via a GitHub App token when `.gitmodules` exists |
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
 | `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster, chart and values read from a config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
