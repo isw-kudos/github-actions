@@ -1,0 +1,154 @@
+name: Clean up Images (ghcr.io)
+
+# Deletes stale versions of the listed ghcr.io packages with
+# dataaxiom/ghcr-cleanup-action. A buildx push leaves every tagged OCI index
+# with untagged children (the platform manifest and the provenance
+# attestation) that must survive for as long as the index is tagged; the
+# action walks every index and drops its children from the candidate set
+# before any rule is applied. actions/delete-package-versions works on
+# package-version ids alone and would delete those children, breaking every
+# pull of the tag.
+#
+# With no `delete_tags`, only untagged versions older than `older_than` go:
+# the previous `main` / `pr-N` index each push orphans, and the previous
+# `<image>-buildcache` manifest. `delete_tags` adds wildcard tag patterns
+# (e.g. `pr-*,sha-*`); a version that also carries a tag outside the pattern
+# only loses the matched tag and stays.
+#
+# Dry run by default. A deletion is irreversible short of the REST restore
+# endpoint (the log prints every deleted version id), so a caller has to set
+# `dry_run: false` deliberately, after reading a dry-run log.
+#
+# Authenticates with the calling repository's GITHUB_TOKEN, which can delete
+# versions only of packages that grant that repository the Admin role
+# (Package settings -> Manage Actions access). The repository whose workflow
+# first published a package normally has it, but a dry run never issues a
+# DELETE, so check the setting before the first real run. The calling job
+# must grant `packages: write`; a smaller grant fails the run at startup with
+# no logs.
+
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: >-
+          Package names under ghcr.io/<repository owner>, one per line
+          (e.g. huddo-core). Blank lines are ignored.
+        required: true
+        type: string
+      dry_run:
+        description: Log what would be deleted and delete nothing
+        required: false
+        type: boolean
+        default: true
+      older_than:
+        description: >-
+          Only consider versions not updated for this long, as "<n> <unit>"
+          (e.g. "7 days"); a retag onto a version counts as an update. Doubles
+          as the guard against a build whose manifests are pushed but not yet
+          tagged.
+        required: false
+        type: string
+        default: 7 days
+      delete_tags:
+        description: >-
+          Comma-separated wildcard tag patterns to delete as well as untagged
+          versions, e.g. "pr-*,sha-*". Empty deletes untagged versions only.
+        required: false
+        type: string
+        default: ''
+      exclude_tags:
+        description: Comma-separated wildcard tag patterns never to delete
+        required: false
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  cleanup:
+    name: ${{ inputs.dry_run && 'Dry run' || 'Delete' }}
+    runs-on: ubuntu-latest
+    # The action is not safe to run twice on one package at the same time. The
+    # packages a caller lists are its own, so serialise per calling repository
+    # and never cancel a run part-way through its deletes. Job-level so it
+    # holds inside the caller's run; GitHub keeps only one job pending per
+    # group, so a caller with several jobs should chain them with `needs`.
+    concurrency:
+      group: cleanup-images-ghcr-${{ github.repository }}
+      cancel-in-progress: false
+    # A cold run fetches one manifest per package version (cached across runs
+    # with actions/cache afterwards); the largest package here has ~3000.
+    timeout-minutes: 60
+    permissions:
+      packages: write # delete package versions on ghcr.io
+    steps:
+      - name: Check inputs
+        id: check
+        # Inputs arrive as env vars and are allowlisted before the one value
+        # that reaches $GITHUB_OUTPUT (the action wants a comma list) is
+        # written; the rest is passed to the action through `with:` untouched.
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          OLDER_THAN: ${{ inputs.older_than }}
+          DELETE_TAGS: ${{ inputs.delete_tags }}
+          EXCLUDE_TAGS: ${{ inputs.exclude_tags }}
+        run: |
+          set -euo pipefail
+          fail=0
+          if [[ ! "$OLDER_THAN" =~ ^[0-9]+\ (second|minute|hour|day|week|month|year)s?$ ]]; then
+            echo "::error::older_than '$OLDER_THAN' is not '<n> <unit>' (e.g. '7 days')"
+            fail=1
+          fi
+          pattern_re='^[A-Za-z0-9_.*?-]*$'
+          for pair in "delete_tags=$DELETE_TAGS" "exclude_tags=$EXCLUDE_TAGS"; do
+            IFS=, read -ra patterns <<< "${pair#*=}"
+            for pattern in "${patterns[@]}"; do
+              if [[ ! "$pattern" =~ $pattern_re ]]; then
+                echo "::error::${pair%%=*} pattern '$pattern' is not a tag wildcard pattern"
+                fail=1
+              fi
+            done
+          done
+
+          packages=()
+          declare -A seen=()
+          name_re='^[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$'
+          # `read` with the default IFS trims the line (but not a CR, hence the
+          # strip); anything left after the first word means two names were put
+          # on one line.
+          while read -r name rest; do
+            [[ -z "$name" ]] && continue
+            if [[ -n "$rest" || ! "$name" =~ $name_re ]]; then
+              echo "::error::'$name${rest:+ $rest}' is not a valid package name (one lowercase OCI repository name per line)"
+              fail=1
+              continue
+            fi
+            if [[ -n "${seen[$name]:-}" ]]; then
+              echo "::error::'$name' is listed more than once"
+              fail=1
+              continue
+            fi
+            seen[$name]=1
+            packages+=("$name")
+          done <<< "${PACKAGES//$'\r'/}"
+          if [[ ${#packages[@]} -eq 0 ]]; then
+            echo "::error::packages is empty"
+            fail=1
+          fi
+          [[ $fail -eq 0 ]] || exit 1
+          echo "packages=$(IFS=,; echo "${packages[*]}")" >> "$GITHUB_OUTPUT"
+
+      - name: Clean up
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          owner: ${{ github.repository_owner }}
+          packages: ${{ steps.check.outputs.packages }}
+          dry-run: ${{ inputs.dry_run }}
+          older-than: ${{ inputs.older_than }}
+          delete-untagged: true
+          delete-tags: ${{ inputs.delete_tags }}
+          exclude-tags: ${{ inputs.exclude_tags }}
+          # Post-run scan that warns if any index was left without its
+          # children, i.e. the property this workflow relies on did not hold.
+          validate: true

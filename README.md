@@ -164,6 +164,43 @@ jobs:
         user
 ```
 
+#### cleanup-images-ghcr
+Deletes stale versions of the listed `ghcr.io/<owner>/<package>` packages with `dataaxiom/ghcr-cleanup-action`. By default only untagged versions not updated for `older_than` (7 days; a retag counts as an update) are deleted; the action walks every tagged OCI index first and keeps its untagged children (platform manifests, provenance attestations), which `actions/delete-package-versions` would delete. `delete_tags` adds wildcard tag patterns (a version that also carries a tag outside the pattern only loses the matched tag). `dry_run` defaults to `true`: read a dry-run log before a caller sets it to `false`. Authenticates with the calling repo's `GITHUB_TOKEN`, so that repo needs the Admin role on every package listed (Package settings -> Manage Actions access; the repo that first published a package normally has it, but a dry run never exercises it). Grant exactly `packages: write` on the calling job.
+
+```yaml
+on:
+  schedule:
+    - cron: '0 16 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  untagged:
+    permissions:
+      packages: write
+    uses: isw-kudos/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
+    with:
+      dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      packages: |
+        huddo-core
+        huddo-wikis
+  buildcache:
+    permissions:
+      packages: write
+    uses: isw-kudos/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
+    with:
+      dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      older_than: 1 day
+      packages: |
+        huddo-core-buildcache
+        huddo-wikis-buildcache
+```
+
 #### turbo-repo-cache
 Composite action. Authenticates to GCP via OIDC and starts a local Turborepo remote-cache server backed by a GCS bucket. Subsequent `turbo` commands in the job use the local cache.
 

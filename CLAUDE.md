@@ -63,6 +63,7 @@ Each externally consumed component is independently versioned with a semver tag 
 | `claude-code-review` | `claude-code-review-v` |
 | `turbo-repo-cache` | `turbo-repo-cache-v` |
 | `retag-images-ghcr` | `retag-images-ghcr-v` |
+| `cleanup-images-ghcr` | `cleanup-images-ghcr-v` |
 
 Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker-build): ...`, `chore(turbo-repo-cache): ...`) so commits land in the correct release. Renovate dependency bumps are committed as `chore(<component>): ...`; human bug fixes use `fix(<component>): ...`. Full mechanics — release workflows, Renovate `packageRules` wiring, bump rules, the `ecs-query`/`ecs-deploy` runtime caveat, and steps to add a new component — live in the `per-component-versioning` skill (`.claude/skills/per-component-versioning/SKILL.md`) and `docs/per-component-versioning.md`. Load the skill whenever working on releases, Renovate scope rules, or component additions.
 
@@ -76,6 +77,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster, chart and values read from a config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, OCI index and digest preserved, every source resolved before any tag moves and written by that digest |
+| `cleanup-images-ghcr.yml` | Delete stale versions of a list of ghcr.io packages (untagged by default, tag patterns on request) with `dataaxiom/ghcr-cleanup-action`, which keeps the untagged children every tagged OCI index references; dry run unless told otherwise |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |
 | `zizmor.yml` | Static security audit of all workflows/actions (zizmor); fails CI on findings |

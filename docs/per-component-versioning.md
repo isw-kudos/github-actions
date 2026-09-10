@@ -22,6 +22,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
 | turbo-repo-cache | `turbo-repo-cache-v` | `.github/actions/turbo-repo-cache/**` | huddo (Turborepo monorepo CI) |
 | retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
+| cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 
 ## Version bump rules
 
@@ -72,6 +73,7 @@ Mapping currently in `renovate.json`:
 | `.github/workflows/claude-code-review.yml` | `chore(claude-code-review): ...` | claude-code-review (patch) |
 | `.github/actions/turbo-repo-cache/**` | `chore(turbo-repo-cache): ...` | turbo-repo-cache (patch) |
 | `.github/workflows/retag-images-ghcr.yml` | `chore(retag-images-ghcr): ...` | retag-images-ghcr (patch) |
+| `.github/workflows/cleanup-images-ghcr.yml` | `chore(cleanup-images-ghcr): ...` | cleanup-images-ghcr (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | No component release (catch-all, but no `paths:` match) |
 
 Other Renovate behaviours that affect release cadence:
@@ -216,6 +218,7 @@ pre-commit install --hook-type commit-msg
 | `.github/actions/wait-for-required-checks/**` | `wait-for-required-checks` | `chore(wait-for-required-checks): ...` |
 | `.github/actions/turbo-repo-cache/**` | `turbo-repo-cache` | `chore(turbo-repo-cache): ...` |
 | `.github/workflows/retag-images-ghcr.yml` | `retag-images-ghcr` | `chore(retag-images-ghcr): ...` |
+| `.github/workflows/cleanup-images-ghcr.yml` | `cleanup-images-ghcr` | `chore(cleanup-images-ghcr): ...` |
 | Other files | Default (`deps`) | `chore(deps): ...` |
 
 ## Adding a new component
