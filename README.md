@@ -147,7 +147,7 @@ jobs:
 ```
 
 #### retag-images-ghcr
-Points `target_tag` at `source_tag` on every listed `ghcr.io/<owner>/<image>` with `crane tag`: no layers are pulled, the digest and OCI index (multi-platform, provenance) are preserved, and every source tag is resolved before any tag moves so a missing image fails the run with nothing changed. The job summary records each image's source digest and what the target pointed at before. Authenticates with the calling repo's `GITHUB_TOKEN`, so that repo needs write access to every package listed. Grant exactly `packages: write` on the calling job.
+Points `target_tag` at `source_tag` on every listed `ghcr.io/<owner>/<image>` with `crane tag`: no layers are pulled and the manifest is re-pointed as is, so an OCI index (multi-platform, provenance) keeps its digest where a docker pull/push would flatten it. Every source digest is resolved before any tag moves, so a missing image fails the run with nothing changed, and the tag is then written by that digest. The job summary records each image's source digest and what the target pointed at before. Authenticates with the calling repo's `GITHUB_TOKEN`, so that repo needs write access to every package listed. Grant exactly `packages: write` on the calling job; if the caller is itself a reusable wrapper (collab and boards keep their image list in one), every job along the chain needs that grant.
 
 ```yaml
 jobs:

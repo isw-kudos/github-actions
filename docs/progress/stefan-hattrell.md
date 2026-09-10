@@ -22,7 +22,11 @@
   `docs/plans/2026-09-09-retag-images-ghcr.md`.
 - Consumer wrappers drafted in collab (`retag-images.yml`) and boards
   (`retag-images.yaml`) worktrees with a placeholder pin; their callers need
-  no change.
+  no change. PRs: github-actions #39, collab #866, boards #392.
+- Adversarial review (two agents) led to: `timeout` on every crane call,
+  `crane-release` pinned and renovate-tracked (`verify: true` dropped, it was
+  a no-op without slsa-verifier), tag by resolved digest, non-404 target
+  reads fail the preflight, duplicates rejected, CR stripped.
 
 ### Decisions
 - Named `retag-images-ghcr`, not `retag-images`, and no registry/namespace

@@ -75,7 +75,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
 | `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster, chart and values read from a config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
-| `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, digest and OCI index preserved, every source resolved before any tag moves |
+| `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, OCI index and digest preserved, every source resolved before any tag moves and written by that digest |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |
 | `zizmor.yml` | Static security audit of all workflows/actions (zizmor); fails CI on findings |

@@ -5,15 +5,19 @@ name: Retag Images (ghcr.io)
 # under the new tag on the registry side, so the target is byte-identical to
 # the source: same digest, and an OCI index (multi-platform manifests,
 # provenance attestations) survives intact. A `docker pull` / `docker tag` /
-# `docker push` round trip, which this replaces, downloads every layer, keeps
-# only the runner's platform, and changes the digest.
+# `docker push` round trip, which this replaces, downloads every layer and
+# flattens an index (what buildx pushes by default) to the runner's platform,
+# changing its digest.
 #
 # Every source tag is resolved BEFORE anything is written, so a missing image
 # fails the run with nothing moved instead of leaving the target tag half
-# promoted. The retags then run in parallel and every failure is reported,
-# not just the first. The job summary records each image's source digest and
-# what the target tag pointed at before, which is the thing to read before
-# deciding whether to roll back.
+# promoted. The retags then run in parallel, by the digest the preflight
+# resolved (a push to the source tag in between cannot change what is
+# promoted), and every failure is reported, not just the first. Each registry
+# call is bounded so a stalled connection is reported like any other failure
+# instead of taking the job timeout down with the summary unwritten. The job
+# summary records each image's source digest and what the target tag pointed
+# at before, which is the thing to read before deciding whether to roll back.
 #
 # Authenticates to ghcr.io with the calling repository's GITHUB_TOKEN, so the
 # calling repository needs write access to every package in `images` (org
@@ -43,8 +47,11 @@ permissions: {}
 
 # Two runs moving the same tag at once (a promote and a rollback dispatched
 # together) would race; serialise per target tag and never cancel one in
-# flight. `github.repository_owner` here is the caller's, i.e. the ghcr.io
-# namespace being written to.
+# flight. GitHub still keeps at most one PENDING run per group and drops an
+# older pending run when a newer one arrives, so a run queued behind an
+# in-flight one can be cancelled: check it ran, re-dispatch if not.
+# `github.repository_owner` here is the caller's, i.e. the ghcr.io namespace
+# being written to.
 concurrency:
   group: retag-images-ghcr-${{ github.repository_owner }}-${{ inputs.target_tag }}
   cancel-in-progress: false
@@ -58,11 +65,16 @@ jobs:
     timeout-minutes: 10
     permissions:
       packages: write # crane pushes the target tag to ghcr.io
+    env:
+      # Ceiling on each crane call, in seconds. ghcr.io answers a manifest
+      # request in well under a second; anything near this is a hang.
+      CRANE_TIMEOUT: 120
     steps:
       - name: Install crane
         uses: iarekylew00t/crane-installer@8efb0e525fa83ad39276d294d67dda1cc85733d9 # v4.0.15
         with:
-          verify: true
+          # renovate: datasource=github-releases depName=google/go-containerregistry
+          crane-release: v0.22.1
 
       - name: Login to ghcr.io
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -101,9 +113,11 @@ jobs:
           fi
 
           images=()
+          declare -A seen=()
           image_re='^[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$'
-          # `read` with the default IFS trims the line; anything left after the
-          # first word means two names were put on one line.
+          # `read` with the default IFS trims the line (but not a CR, hence the
+          # strip); anything left after the first word means two names were put
+          # on one line.
           while read -r name rest; do
             [[ -z "$name" ]] && continue
             if [[ -n "$rest" || ! "$name" =~ $image_re ]]; then
@@ -111,8 +125,14 @@ jobs:
               fail=1
               continue
             fi
+            if [[ -n "${seen[$name]:-}" ]]; then
+              echo "::error::'$name' is listed more than once"
+              fail=1
+              continue
+            fi
+            seen[$name]=1
             images+=("$name")
-          done <<< "$IMAGES"
+          done <<< "${IMAGES//$'\r'/}"
           if [[ ${#images[@]} -eq 0 ]]; then
             echo "::error::images is empty"
             fail=1
@@ -122,31 +142,40 @@ jobs:
 
           # Resolve every source digest, and what the target currently points
           # at, in parallel. A target that does not exist yet (first snapshot)
-          # is fine; any other target error will recur, and be reported, when
-          # the retag step writes to it.
+          # is "(none)"; any other failure reading it (rate limit, 5xx) fails
+          # the run here, while nothing has been written, rather than being
+          # recorded as "there was nothing to roll back to".
           resolve() {
             local i=$1 image=$2 ref="ghcr.io/$OWNER/$2"
-            crane digest "$ref:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err" || return 1
-            crane digest "$ref:$TARGET_TAG" > "$STATE/$i.target" 2>/dev/null || echo "(none)" > "$STATE/$i.target"
+            timeout "$CRANE_TIMEOUT" crane digest "$ref:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err" || return 1
+            if ! timeout "$CRANE_TIMEOUT" crane digest "$ref:$TARGET_TAG" > "$STATE/$i.target" 2> "$STATE/$i.target.err"; then
+              grep -qE 'MANIFEST_UNKNOWN|NAME_UNKNOWN' "$STATE/$i.target.err" || return 2
+              echo "(none)" > "$STATE/$i.target"
+            fi
           }
           pids=()
           for i in "${!images[@]}"; do
             resolve "$i" "${images[$i]}" &
             pids+=("$!")
           done
-          missing=0
+          unresolved=0
           for i in "${!images[@]}"; do
             image="${images[$i]}"
             if wait "${pids[$i]}"; then
               printf '%-40s %s\n' "$image:$SOURCE_TAG" "$(<"$STATE/$i.source")"
             else
-              err=$(<"$STATE/$i.source.err")
-              echo "::error::ghcr.io/$OWNER/$image:$SOURCE_TAG: ${err//$'\n'/ }"
-              missing=$((missing + 1))
+              if [[ $? -eq 2 ]]; then
+                err=$(tr '\n' ' ' < "$STATE/$i.target.err")
+                echo "::error::ghcr.io/$OWNER/$image:$TARGET_TAG: could not read the current digest: ${err:-no response within ${CRANE_TIMEOUT}s}"
+              else
+                err=$(tr '\n' ' ' < "$STATE/$i.source.err")
+                echo "::error::ghcr.io/$OWNER/$image:$SOURCE_TAG: ${err:-no response within ${CRANE_TIMEOUT}s}"
+              fi
+              unresolved=$((unresolved + 1))
             fi
           done
-          if (( missing > 0 )); then
-            echo "::error::$missing of ${#images[@]} source image(s) could not be resolved; nothing was retagged"
+          if (( unresolved > 0 )); then
+            echo "::error::$unresolved of ${#images[@]} image(s) could not be resolved; nothing was retagged"
             exit 1
           fi
 
@@ -160,9 +189,12 @@ jobs:
           STATE="$RUNNER_TEMP/retag"
           mapfile -t images < "$STATE/images"
 
+          # Tag by the digest the preflight resolved, not by the source tag, so
+          # the summary describes exactly what was promoted even if the source
+          # tag moved in between.
           pids=()
           for i in "${!images[@]}"; do
-            crane tag "ghcr.io/$OWNER/${images[$i]}:$SOURCE_TAG" "$TARGET_TAG" > "$STATE/$i.tag.log" 2>&1 &
+            timeout "$CRANE_TIMEOUT" crane tag "ghcr.io/$OWNER/${images[$i]}@$(<"$STATE/$i.source")" "$TARGET_TAG" > "$STATE/$i.tag.log" 2>&1 &
             pids+=("$!")
           done
 
@@ -187,8 +219,8 @@ jobs:
             else
               result="**failed**"
               failed=$((failed + 1))
-              err=$(<"$STATE/$i.tag.log")
-              echo "::error::ghcr.io/$OWNER/$image:$TARGET_TAG: ${err//$'\n'/ }"
+              err=$(tr '\n' ' ' < "$STATE/$i.tag.log")
+              echo "::error::ghcr.io/$OWNER/$image:$TARGET_TAG: ${err:-no response within ${CRANE_TIMEOUT}s}"
             fi
             echo "| \`$image\` | \`$(short "$source")\` | \`$(short "$previous")\` | $result |" >> "$summary"
           done

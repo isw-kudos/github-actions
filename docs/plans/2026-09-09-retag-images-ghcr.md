@@ -10,9 +10,9 @@ image they deploy by calling the `retag-image` composite action in the private
 
 - downloads and re-uploads every layer of every image, sequentially, to move a
   tag;
-- flattens the OCI index buildx pushes (provenance attestation, any extra
-  platform) to the runner's platform and so changes the digest, so a promoted
-  tag never has the digest of the tag it came from;
+- flattens the OCI index buildx pushes by default (provenance attestation,
+  any extra platform) to the runner's platform and so changes its digest, so
+  a promoted tag never has the digest of the tag it came from;
 - stops at the first failure, leaving the target tag half promoted, with no
   preflight;
 - expands `${{ inputs.* }}` straight into `run:` (gha-security §4).
@@ -39,17 +39,22 @@ caller job (collab retag-images.yml / boards retag-images.yaml, kept as thin
     │
     ▼
   retag  (ubuntu-latest, timeout 10m, permissions: packages: write,
-          concurrency retag-images-ghcr-<owner>-<target_tag>, no cancel)
-    1. crane-installer (verify: true) + docker/login-action ghcr.io with GITHUB_TOKEN
+          concurrency retag-images-ghcr-<owner>-<target_tag>, no cancel,
+          CRANE_TIMEOUT=120 bounds every crane call)
+    1. crane-installer (crane-release pinned, renovate-tracked)
+       + docker/login-action ghcr.io with GITHUB_TOKEN
     2. Check sources    allowlist tags (OCI tag regex) and names (lowercase OCI
-                        repository regex, one per line), source != target;
+                        repository regex, one per line, no duplicates, CR
+                        stripped), source != target;
                         crane digest <img>:<source> for every image in parallel,
-                        plus what <target> points at now ("(none)" if absent);
-                        any unresolved source -> fail, nothing written
-    3. Retag            crane tag <img>:<source> <target> in parallel; wait on
-                        each, collect failures; $GITHUB_STEP_SUMMARY table
-                        image | source digest | target was | updated/unchanged/failed;
-                        exit 1 if any failed
+                        plus what <target> points at now ("(none)" only on
+                        MANIFEST_UNKNOWN / NAME_UNKNOWN; any other read failure
+                        is fatal here, before a write);
+                        any unresolved image -> fail, nothing written
+    3. Retag            crane tag <img>@<source digest> <target> in parallel;
+                        wait on each, collect failures; $GITHUB_STEP_SUMMARY
+                        table image | source digest | target was |
+                        updated/unchanged/failed; exit 1 if any failed
 ```
 
 All inputs reach `run:` through `env:`; nothing from `${{ }}` is expanded in
@@ -77,6 +82,12 @@ consuming repo, as before.
   (updated / unchanged / first-time target), missing source (no `tag` call
   made), invalid tags and names, empty list, one `tag` push denied (others
   proceed, run fails, summary marks the failure).
+- [x] 2b. Adversarial review (separate agent) and fixes: bound each crane call
+  with `timeout` so a stalled write still produces the summary; pin
+  `crane-release` (the installer defaulted to `latest`, and its `verify: true`
+  silently skips when `slsa-verifier` is absent, so that input is gone); tag by
+  the resolved digest, not the source tag; fail the preflight on a non-404
+  target read instead of recording `(none)`; reject duplicate names; strip CR.
 - [x] 3. Component wiring: `releases/retag-images-ghcr/.releaserc.js`,
   `release-retag-images-ghcr.yml`, `renovate.json` scope rule,
   `check-component-scope.sh` case, docs tables (this repo's
@@ -107,7 +118,11 @@ pre-commit run --files .github/workflows/retag-images-ghcr.yml .github/workflows
   copy stays the tool for cross-registry (quay) moves.
 - Always tag, even when the target already has the source digest: one code
   path, and it verifies write access uniformly; the summary says `unchanged`.
-- Target digest lookup failures other than "absent" are not distinguished in
-  the preflight; the write in step 3 reports them.
+- crane binary signature verification is deferred: crane-installer only
+  verifies when `slsa-verifier` is already on the runner, so it would need its
+  own pinned installer step. The release is pinned instead.
+- GitHub keeps one pending run per concurrency group and drops an older pending
+  run when a newer arrives, so a run queued behind an in-flight one can vanish.
+  Documented in the workflow header; inherent to Actions.
 - Consumer wrappers rather than inlining the list in each caller job: the list
   would otherwise be copied three times per repo.
