@@ -56,8 +56,19 @@
   (re-dispatched after the behind-remote race). Consumer PRs opened:
   huddo-services#198/#199, collab#877/#878, boards#401/#402.
 
+- 2026-09-11: Renovate automerged the v1.1.0 pin in all three repos first;
+  the six consumer PRs were rebased (clean) and the three build bumps merged.
+  huddo-services#199 merged and dry-run dispatched: 3925 / 1245 / 1744
+  versions staged, validation clean; flip PR opened. collab#878 / boards#402
+  carry a `dry_run` dispatch checkbox, schedule still dry until their own
+  dry run is read. Pinning (collab#874, boards#400) paused as drafts.
+- collab main CI is red on an ideas snapshot since #751 squash-merged a
+  stale lockfile (lucide-react 1.43.0 -> 1.31.0); spun off as a separate
+  task; collab#877 was merged regardless (no code in it).
+
 ### Next Steps
-- Merge the six consumer PRs (build bumps, then cleanup schedules).
+- Merge the huddo-services flip PR; merge collab#878 / boards#402, dispatch
+  a dry run in each, then flip their schedules.
 - Dispatch each `cleanup-images` workflow as a dry run, review counts, then
   flip the scheduled `dry_run` per repo.
 - Follow-ups: delete collab's devops freeze rule once #866 and the

@@ -215,13 +215,17 @@ to the main-to-prod / main-to-cloud job only.
       `docker-compose.smoke.yaml` header, which asserted the pre-pin behaviour._
 - [x] 9. huddo-services#199, collab#878, boards#402: huddo-services / collab / boards: `cleanup-images.y(a)ml` scheduled
       workflow, dry-run. Depends on 3 released.
-- [ ] 10. Run each cleanup workflow by dispatch (dry run), paste the "would
+- [~] 10. Run each cleanup workflow by dispatch (dry run), paste the "would
       delete" counts here, confirm in Package settings -> Manage Actions access
       that the repo holds Admin on one package of each kind (a dry run never
       issues a DELETE, so the first real run is the first authorisation test),
       get explicit approval, then a follow-up PR per repo replaces the
       hardcoded `dry_run: true` with a `workflow_dispatch` input and a real
       scheduled run.
+      _huddo-services: dry run reviewed (table under Verification), flip PR
+      opened 2026-09-11 (`dry_run` checkbox on dispatch, default true; schedule
+      real). collab#878 / boards#402 amended to carry the checkbox now with the
+      schedule still dry; their flip is a one-line follow-up after a dispatch._
 - [ ] 11. Progress log updated; this plan annotated with what actually happened.
 
 ## Verification
@@ -258,7 +262,18 @@ gh workflow run cleanup-images.yaml -R isw-kudos/huddo-services -f dry_run=true
 | `boards-core` (boards#401) | `pr-401`, `sha-6e2d5503…` | `6e2d5503…` | same set |
 
 Every other build on the three PRs succeeded too (boards boot-smoke included).
-Hygiene dry-run counts: pending the cleanup PRs merging and a dispatch.
+Hygiene dry run, huddo-services (run 34469310352, 2026-09-10, after #199
+merged), totals include each deleted index's children; validation "no errors
+found" on all twelve package passes; every staged tag is `pr-56`..`pr-76`
+(newest last touched 2026-06-10) and none carries another tag:
+
+| pass | user | provider | licence | socketcluster | total |
+|---|---|---|---|---|---|
+| untagged, 7 days | 1157 | 986 | 919 | 863 | 3925 |
+| `pr-*`/`sha-*`, 90 days | 403 (64 tags) | 289 (50) | 276 (49) | 277 (51) | 1245 |
+| `-buildcache`, 1 day | 514 | 426 | 406 | 398 | 1744 |
+
+collab and boards: pending their cleanup PRs merging and a dispatch.
 
 ## Notes / Deferred
 
