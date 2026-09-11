@@ -277,11 +277,16 @@ collab and boards: pending their cleanup PRs merging and a dispatch.
 
 ## Notes / Deferred
 
-- **Pinning paused (2026-09-10).** Focus is the metadata-action tags and the
-  cleanup component; collab#874 and boards#400 stay open as drafts and the
-  huddo-services `paths:` change is parked with them. Everything else in this
-  plan stands; the `sha-` tags still ship so the pinning work can resume
-  without a component change.
+- **Pinning parked (2026-09-10, confirmed 2026-09-11).** Focus was the
+  metadata-action tags and the cleanup component; collab#874 and boards#400
+  stay open as drafts and the huddo-services `paths:` change is parked with
+  them. Everything else in this plan stands; the `sha-` tags ship on every
+  build, so the pinning work can resume without a component change.
+- **devops decommission (2026-09-11).** `.github/actions/retag-image` and
+  `.github/actions/turbo-repo-cache` are still on devops master with no
+  remaining callers (org code search; the boards skill mentions the former
+  only as an anti-pattern example). Spun off as its own task; the
+  deploy-*.yaml workflows there are to be checked for callers before removal.
 
 - **metadata-action, not a caller expression.** Every caller had the same
   expression; the component owns the tag set now so a new tag (the commit tag)

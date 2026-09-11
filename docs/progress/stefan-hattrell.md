@@ -66,8 +66,12 @@
   stale lockfile (lucide-react 1.43.0 -> 1.31.0); spun off as a separate
   task; collab#877 was merged regardless (no code in it).
 
+- Pinning parked for now (drafts stay). devops `retag-image` and
+  `turbo-repo-cache` actions still exist with no callers; decommission
+  spun off as a separate task.
+
 ### Next Steps
-- Merge the huddo-services flip PR; merge collab#878 / boards#402, dispatch
+- Merge the huddo-services flip PR (#204); merge collab#878 / boards#402, dispatch
   a dry run in each, then flip their schedules.
 - Dispatch each `cleanup-images` workflow as a dry run, review counts, then
   flip the scheduled `dry_run` per repo.
