@@ -182,25 +182,29 @@ to the main-to-prod / main-to-cloud job only.
       PR title `feat(docker-build-ghcr): generate tags and OCI labels with metadata-action`.
 - [x] 3. (PR #53) `cleanup-images-ghcr.yml` (no hand-seeded tag: semantic-release cuts
       `cleanup-images-ghcr-v1.0.0` from the first scoped `feat` commit, as it did
-      for `retag-images-ghcr`) + `releases/cleanup-images-ghcr/.releaserc.js`
+      for `retag-images-ghcr`)
+      _deviation: the push-triggered release run hit "local branch main is
+      behind the remote one" because #52 merged while it ran (the documented
+      race); re-dispatched, so `cleanup-images-ghcr-v1.0.0` points at the
+      #52 merge commit 4ba07389, same as `docker-build-ghcr-v1.1.0`._ + `releases/cleanup-images-ghcr/.releaserc.js`
       + `release-cleanup-images-ghcr.yml` + renovate rule + scope-hook case +
       docs/CLAUDE/README. PR title `feat(cleanup-images-ghcr): scheduled ghcr.io package cleanup`.
       _deviation: concurrency moved from the workflow level to the job, since a
       called workflow's top-level `concurrency` could not be confirmed to apply;
       callers chain their jobs with `needs` because GitHub keeps one pending job
       per group._
-- [ ] 4. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ huddo-services: bump the four `build-*.yaml` to `docker-build-ghcr-v1.1.0`,
+- [x] 4. huddo-services#198:  bump the four `build-*.yaml` to `docker-build-ghcr-v1.1.0`,
       drop `tag:`. Depends on 2 released.
       _deviation: the "drop `paths:` on push" half is parked with the pinning
       work (see 7/8); it only existed to guarantee a `sha-` tag on every image
       for every main commit._
-- [ ] 5. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ collab: bump nine `build-*.yml`, drop `tag:`; migrate `build-search.yml`
+- [x] 5. collab#877:  bump nine `build-*.yml`, drop `tag:`; migrate `build-search.yml`
       to the component (drop `id-token: write` and `secrets: inherit`); delete
       the devops freeze rule in `renovate.json` and the `secrets: inherit`
       exception in the gha-security skill. Depends on 2 released.
       _deviation: stacked on collab#866 (it rewrites the same renovate/skill
       paragraphs); after both, no devops ref is left in collab._
-- [ ] 6. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ boards: bump seven `build-*.yaml`, drop `tag:`; delete the dead
+- [x] 6. boards#401:  bump seven `build-*.yaml`, drop `tag:`; delete the dead
       `build-*.yaml` devops freeze rule and the skill exception. Depends on 2
       released. _deviation: stacked on boards#392 for the same reason as 5._
 - [~] 7. collab#874 (draft, PAUSED 2026-09-10): promote by pin (wrapper + `promote-main-to-prod.yml`).
@@ -209,7 +213,7 @@ to the main-to-prod / main-to-cloud job only.
 - [~] 8. boards#400 (draft, PAUSED 2026-09-10): promote by pin (wrapper + `promote-main-to-cloud.yaml`).
       _deviation: same as 7 (boards#392 merged first); also reworded the
       `docker-compose.smoke.yaml` header, which asserted the pre-pin behaviour._
-- [ ] 9. _(prepared in a worktree, uncommitted; awaiting the release pin / approval)_ huddo-services / collab / boards: `cleanup-images.y(a)ml` scheduled
+- [x] 9. huddo-services#199, collab#878, boards#402: huddo-services / collab / boards: `cleanup-images.y(a)ml` scheduled
       workflow, dry-run. Depends on 3 released.
 - [ ] 10. Run each cleanup workflow by dispatch (dry run), paste the "would
       delete" counts here, confirm in Package settings -> Manage Actions access
@@ -244,6 +248,17 @@ crane digest ghcr.io/isw-kudos/user:prod == crane digest ghcr.io/isw-kudos/user:
 gh workflow run cleanup-images.yaml -R isw-kudos/huddo-services -f dry_run=true
 # read the job log: per package "would delete N untagged / N tagged", validate: no missing children
 ```
+
+### Verified 2026-09-10 on the first PR builds
+
+| image | tags on the new build | index `revision` | config labels |
+|---|---|---|---|
+| `user` (huddo-services#198) | `pr-198`, `sha-9c39ba38…` (same digest) | `9c39ba38…` | created, description, revision, source, title, url, version=`pr-198` |
+| `huddo-search` (collab#877, first build on the component) | `pr-877`, `sha-b911d35a…` | `b911d35a…` | same set |
+| `boards-core` (boards#401) | `pr-401`, `sha-6e2d5503…` | `6e2d5503…` | same set |
+
+Every other build on the three PRs succeeded too (boards boot-smoke included).
+Hygiene dry-run counts: pending the cleanup PRs merging and a dispatch.
 
 ## Notes / Deferred
 
