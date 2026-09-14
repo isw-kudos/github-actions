@@ -66,13 +66,18 @@
   stale lockfile (lucide-react 1.43.0 -> 1.31.0); spun off as a separate
   task; collab#877 was merged regardless (no code in it).
 
+- 2026-09-14: first Sunday schedules ran. huddo-services deleted for real
+  (~3400 versions in the hour before the 60-minute ceiling cancelled the
+  untagged job; the other two passes finished); collab and boards produced
+  their dry-run logs (6376/0/5821 and 13525/5843/8038). Opened
+  github-actions#80 (timeout 360), collab#911 and boards#410 (flips).
+  collab#884 (lockfile fix, spun-off task) merged. devops#72/#76 removed
+  docker-build-generic and the deploy workflows; retag-image and
+  turbo-repo-cache removal is the open spun-off task.
+
 ### Next Steps
-- Merge the huddo-services flip PR; merge collab#878 / boards#402, dispatch
-  a dry run in each, then flip their schedules.
-- Dispatch each `cleanup-images` workflow as a dry run, review counts, then
-  flip the scheduled `dry_run` per repo.
-- Follow-ups: delete collab's devops freeze rule once #866 and the
-  build-search migration are both in; dev8/staging from the pin.
+- Merge #80, collab#911, boards#410; Renovate rolls v1.0.1 to the consumers.
+- Parked: pinning (collab#874, boards#400 drafts); dev8/staging from the pin.
 
 ## 2026-09-09 (retag-images-ghcr)
 Added the `retag-images-ghcr` component (parallel `crane tag` by resolved

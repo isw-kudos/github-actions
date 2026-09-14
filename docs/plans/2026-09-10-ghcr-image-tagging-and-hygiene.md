@@ -222,10 +222,12 @@ to the main-to-prod / main-to-cloud job only.
       get explicit approval, then a follow-up PR per repo replaces the
       hardcoded `dry_run: true` with a `workflow_dispatch` input and a real
       scheduled run.
-      _huddo-services: dry run reviewed (table under Verification), flip PR
-      opened 2026-09-11 (`dry_run` checkbox on dispatch, default true; schedule
-      real). collab#878 / boards#402 amended to carry the checkbox now with the
-      schedule still dry; their flip is a one-line follow-up after a dispatch._
+      _huddo-services: dry run reviewed, flipped in #204 (merged 2026-09-11),
+      first real run 2026-09-13 cut off by the 60-minute ceiling (fix:
+      github-actions#80, `timeout-minutes: 360`). collab#878 / boards#402
+      merged with the checkbox and a dry schedule; their first Sunday runs were
+      the dry runs (tables under Verification); flips opened 2026-09-14 as
+      collab#911 and boards#410._
 - [ ] 11. Progress log updated; this plan annotated with what actually happened.
 
 ## Verification
@@ -273,7 +275,21 @@ found" on all twelve package passes; every staged tag is `pr-56`..`pr-76`
 | `pr-*`/`sha-*`, 90 days | 403 (64 tags) | 289 (50) | 276 (49) | 277 (51) | 1245 |
 | `-buildcache`, 1 day | 514 | 426 | 406 | 398 | 1744 |
 
-collab and boards: pending their cleanup PRs merging and a dispatch.
+collab and boards dry runs (first Sunday schedule, 2026-09-13; runs
+34767602269 and 34767498485), validation clean on every package pass:
+
+| pass | collab (10 images) | boards (7 images) |
+|---|---|---|
+| untagged, 7 days | 6376 (`huddo-search` 0, new) | 13525 |
+| `pr-*`/`sha-*`, 90 days | 0 | 5843 under 480 tags |
+| `-buildcache`, 1 day | 5821 | 8038 |
+
+First **real** run, huddo-services (schedule 2026-09-13, run 34768002376):
+`user` 1511 -> 280 versions, `provider` 1263 -> 243, `licence` 1185 -> 240,
+`socketcluster` 1113 -> 480 (the `untagged` job was cancelled by the
+component's 60-minute ceiling part-way through it; `stale-tags` and
+`buildcache` completed). Authorisation and the delete path are proven; the
+ceiling is raised to 360 in github-actions#80.
 
 ## Notes / Deferred
 
@@ -336,6 +352,10 @@ collab and boards: pending their cleanup PRs merging and a dispatch.
   referrers) from the candidate set before applying rules, and `validate`
   reports any index left with missing children. snok/container-retention-policy
   has the same manifest gap.
+- **Deletion rate is about one version a second**, measured on the first real
+  run, so a first pass over a package with years of orphans takes hours; the
+  component ceiling is GitHub's maximum (360) after github-actions#80 and a
+  cut-off run just leaves work for the next one.
 - **`older_than` on untagged is a race guard, not retention.** An untagged
   index is unreachable by tag already; 7 days gives room to restore a digest
   by API if a `main` move needs undoing before `*-last-working` catches it.
