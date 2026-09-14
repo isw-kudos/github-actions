@@ -77,9 +77,13 @@ jobs:
     concurrency:
       group: cleanup-images-ghcr-${{ github.repository }}
       cancel-in-progress: false
-    # A cold run fetches one manifest per package version (cached across runs
-    # with actions/cache afterwards); the largest package here has ~3000.
-    timeout-minutes: 60
+    # Deletes go one version at a time at roughly one a second (measured on
+    # the first real huddo-services run: about 3400 in the hour before the old
+    # 60-minute ceiling cancelled it mid-package). A first pass over a package
+    # with years of orphaned versions can stage 13000+ (boards), so the ceiling
+    # is GitHub's maximum; steady-state weekly runs finish in minutes. A cut-off
+    # run is safe, just incomplete: the next run picks up what is left.
+    timeout-minutes: 360
     permissions:
       packages: write # delete package versions on ghcr.io
     steps:
