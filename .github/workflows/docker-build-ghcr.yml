@@ -145,8 +145,8 @@ jobs:
       # One tag set for every caller, derived from the event: the branch name
       # on a branch push (`main`, `dev`), `pr-N` on a pull request, the git tag
       # on a tag push, and always `sha-<full commit sha>` so a manifest can be
-      # found by the commit that built it (collab and boards promote the
-      # huddo-services images by that tag, from their submodule pin). No
+      # found by the commit that built it (a consumer that pins another repo
+      # as a submodule can promote that repo's images by commit). No
       # `latest` and no date tag: nothing deploys either, and a date is not
       # unique per build while the `created` label already records it. On a
       # pull request the sha is the PR head, a commit that exists in the
