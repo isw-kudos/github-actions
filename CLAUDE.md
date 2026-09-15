@@ -127,6 +127,13 @@ Python `3.14.3` (specified in `.python-version`). Dependencies are pinned in `.g
 
 Imported modules: agent-workflow, universal-code, code-minimalism, ci-github.
 
+**This repository is public.** The imported `planning` and `progress-log` rules
+do not apply here: do not commit implementation plans, progress logs, workflow
+run IDs, package or version counts, deployment topology, or the names and PR
+numbers of private consumer repositories. Keep PR bodies and workflow comments
+to what an outside reader needs (behaviour and rationale). Git history is the
+record of past work.
+
 Before editing a file, consult the rules in `.claude/rules/` whose frontmatter
 `paths:` globs match that file (rules with no `paths:` are always in effect).
 Use the skills in `.claude/skills/` (git, commit, branch, pr, plan, …) for their tasks.
