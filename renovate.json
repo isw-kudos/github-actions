@@ -1,25 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "local>isw-kudos/renovate-config",
+    "local>isw-kudos/renovate-config:gha"
   ],
-  "minimumReleaseAge": "7 days",
-  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "pre-commit": {
+    "enabled": true
+  },
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/[^/]+\\.yml$/"
-      ],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)(?: extractVersion=(?<extractVersion>[^\\s]+))?\\n\\s+[\\w-]+:\\s+(?<currentValue>v?[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)"
-      ]
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/[^/]+\\.yml$/"
-      ],
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.yml$/"],
       "matchStrings": [
         "go install github\\.com/terraform-docs/terraform-docs@(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
       ],
@@ -28,70 +19,30 @@
     },
     {
       "customType": "regex",
-      "description": "Track the pinned zizmor CLI version in the Claude PostToolUse hook as zizmorcore/zizmor, so it lands in the Zizmor group and moves in lockstep with the zizmor.yml `version:` pin and the zizmor-action release. Without this the hook version drifts and audits with a different CLI than CI. See .claude/hooks/zizmor-check.sh.",
-      "managerFilePatterns": [
-        "/^\\.claude/hooks/zizmor-check\\.sh$/"
-      ],
-      "matchStrings": [
-        "ZIZMOR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "description": "Track the pinned zizmor CLI version in the Claude PostToolUse hook as zizmorcore/zizmor, so it lands in the Zizmor group and moves in lockstep with the zizmor.yml `version:` pin and the zizmor-action release. This repo's hook lives at .claude/hooks/zizmor-check.sh; the org :gha preset covers the same path, but this repo's zizmor.yml pin uses the `# renovate:` annotation rather than the `# pin the CLI` comment, so the hook manager is kept inline alongside it for clarity.",
+      "managerFilePatterns": ["/^\\.claude/hooks/zizmor-check\\.sh$/"],
+      "matchStrings": ["ZIZMOR_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
-    },
-    {
-      "customType": "regex",
-      "description": "Track the semantic-release and conventionalcommits-preset pins in the release-*.yml `npx --package <name>@<version>` invocations as npm deps; without this the release toolchain never gets bumped.",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/release-[^/]+\\.yml$/"
-      ],
-      "matchStrings": [
-        "--package (?<depName>[@a-z0-9/._-]+)@(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
-      "datasourceTemplate": "npm"
     }
   ],
   "packageRules": [
     {
-      "matchCategories": [
-        "python"
-      ],
+      "matchCategories": ["python"],
       "groupName": "python dependencies"
     },
     {
-      "matchUpdateTypes": [
-        "minor",
-        "patch"
-      ],
+      "description": "Branch automerge for non-majors: merge the green branch without opening a PR at all - the cheapest possible path for this repo's lightweight CI.",
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true,
       "automergeType": "branch"
     },
     {
-      "matchManagers": [
-        "github-actions"
-      ],
-      "pinDigests": true,
+      "description": "Actions bumped here are our own product surface; suffix the commit so consuming repos can spot the source.",
+      "matchManagers": ["github-actions"],
       "minimumReleaseAge": null,
       "commitMessageSuffix": "(github-actions)"
-    },
-    {
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "automerge": false
-    },
-    {
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "automerge": false,
-      "platformAutomerge": false
     },
     {
       "description": "Scope claude-code-review workflow dependency updates",
@@ -191,20 +142,9 @@
       "dependencyDashboardCategory": "Security tooling"
     },
     {
-      "description": "Zizmor - keep the pinned CLI version and the zizmor-action release moving together in ONE PR, gated behind Dependency Dashboard approval and never automerged. zizmor-action ships a support/versions allowlist mapping each exact CLI version to a vetted image digest; its action.sh dies with 'Unknown version' when the version: input is not in the allowlist bundled by the SHA-pinned action release, and the zizmor CLI publishes ahead of the action. Grouping the CLI dep with the action dep makes Renovate propose both in a single branch. THREE package names: the CLI version: input in zizmor.yml is ALSO claimed by the built-in github-actions manager as the docker dep ghcr.io/zizmorcore/zizmor, distinct from the zizmorcore/zizmor github-releases dep the customManager derives from the same literal. Omitting the ghcr name leaves that docker dep ungated - it falls through to pinDigests + the minor/patch automerge rule, and the pin attempt fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). See isw-kudos/github-actions .github/workflows/zizmor.yml.",
-      "groupName": "Zizmor",
-      "matchPackageNames": ["ghcr.io/zizmorcore/zizmor", "zizmorcore/zizmor", "zizmorcore/zizmor-action"],
-      "automerge": false,
-      "dependencyDashboardApproval": true,
-      "dependencyDashboardCategory": "Security tooling"
-    },
-    {
-      "description": "Disable digest pinning for the two VIRTUAL deps the github-actions manager derives from setup-trivy / zizmor-action `version:` inputs. These are CLI version strings, not uses:/image: refs, so there is no digest-pinnable literal in the workflow - pinDigests just fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). The real SHA-pinned action refs (aquasecurity/setup-trivy, zizmorcore/zizmor-action) are separate uses: lines, unaffected by this and still pinned. Must stay AFTER the github-actions manager rule that sets pinDigests:true so this override wins.",
+      "description": "Disable digest pinning for the two VIRTUAL deps the github-actions manager derives from setup-trivy / zizmor-action `version:` inputs. These are CLI version strings, not uses:/image: refs, so there is no digest-pinnable literal in the workflow - pinDigests just fails the renovate/pin-dependencies branch ('Error updating branch: update failure'). The real SHA-pinned action refs (aquasecurity/setup-trivy, zizmorcore/zizmor-action) are separate uses: lines, unaffected by this and still pinned. Must stay AFTER the preset rule that sets pinDigests:true for github-actions so this override wins.",
       "matchPackageNames": ["aquasecurity/trivy", "ghcr.io/zizmorcore/zizmor"],
       "pinDigests": false
     }
-  ],
-  "pre-commit": {
-    "enabled": true
-  }
+  ]
 }
