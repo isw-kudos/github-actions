@@ -221,3 +221,22 @@ steps:
       service-account: my-sa@my-project.iam.gserviceaccount.com
       storage-path: my-turborepo-cache-bucket
 ```
+
+#### detect-image-changes
+Composite action for a consolidated image-build workflow's `changes` job: fetches the push-diff base paths-filter needs, runs `dorny/paths-filter` over caller-supplied filters, and assembles a build-matrix include-array from the results (or from a `workflow_dispatch` image list, where an unknown key fails loudly). The caller keeps the checkout, the filter definitions, the image map, and the draft/label gate + concurrency expressions — GitHub evaluates those before any action runs, so they cannot be centralised; the [action README](.github/actions/detect-image-changes/README.md) holds the canonical copies for drift checks.
+
+```yaml
+steps:
+  - uses: actions/checkout@<dummy hash> # the caller owns the checkout
+    with:
+      persist-credentials: false
+  - id: changes
+    uses: isw-kudos/github-actions/.github/actions/detect-image-changes@<dummy hash>
+    with:
+      dispatch-images: ${{ inputs.images }}
+      filters: |
+        api:
+          - "apps/api/**"
+      images: |
+        {"api": {"dockerfile_path": "apps/api/Dockerfile", "image": "api"}}
+```

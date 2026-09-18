@@ -1,0 +1,155 @@
+name: Detect image changes
+description: >-
+  Change detection for a consolidated image-build workflow: fetch the
+  push-diff base, run dorny/paths-filter over caller-supplied filters, and
+  assemble a build-matrix include-array from the filter results (or from a
+  workflow_dispatch image list). The caller must check out the repository
+  before this action runs — see README.md.
+
+inputs:
+  filters:
+    description: >-
+      paths-filter YAML. One filter per image key (matching the keys of
+      `images`), plus any extra filters the caller wants surfaced in
+      `changed_keys` (e.g. a smoke-relevant surface).
+    required: true
+  images:
+    description: >-
+      JSON object mapping image key to {dockerfile_path, image, build_args?}.
+      Key order is preserved in the matrix; a missing build_args becomes "".
+    required: true
+  dispatch-images:
+    description: >-
+      Comma-separated image keys to build on workflow_dispatch (pass the
+      workflow's own `images` input through). Empty builds all. Any unknown
+      key — even alongside valid ones — fails the run loudly: silently
+      dropping it would give the operator a green run that skipped the image
+      they asked for.
+    required: false
+    default: ""
+  token:
+    description: >-
+      Token for the push-diff base fetch and paths-filter's PR file listing.
+      Needs contents: read (and pull-requests: read on pull_request events).
+    required: false
+    default: ${{ github.token }}
+  base:
+    description: >-
+      Branch to diff push events against. Default: the pushed branch on push
+      events, empty otherwise — paths-filter's own default is the repo
+      default branch, so a push to any other branch would diff against it
+      (rebuilding everything ever changed there) via a credential-less fetch
+      that fails; naming the pushed branch keeps every push diffing against
+      event.before. Left empty on non-push events, where the input is
+      ignored, so the action does not annotate every PR run with an
+      ignored-input warning.
+    required: false
+    default: ""
+
+outputs:
+  matrix:
+    description: >-
+      Build-matrix include-array JSON: [{dockerfile_path, image, build_args},
+      ...] for every selected image, in `images` key order.
+    value: ${{ steps.matrix.outputs.matrix }}
+  any_images:
+    description: '"true" when the matrix is non-empty, "false" otherwise.'
+    value: ${{ steps.matrix.outputs.any_images }}
+  changed_keys:
+    description: >-
+      JSON array of every filter name that matched, including filters that
+      are not image keys. "[]" on workflow_dispatch or when a push has no
+      reachable diff base (when the matrix instead selects by request or
+      builds everything — see the matrix step).
+    value: ${{ steps.matrix.outputs.changed_keys }}
+
+runs:
+  using: composite
+  steps:
+    # paths-filter diffs push events against the push's before-commit, which
+    # is outside the caller's depth-1 clone; its own fetch fails when the
+    # checkout persisted no credential, so fetch it here with a one-process
+    # GIT_CONFIG_* credential (the token never lands in a command line or on
+    # disk). Depth 1 suffices: a tree diff needs no history connectivity.
+    # When there is no base to diff against -- the all-zero before of a
+    # branch-creation push, or a before-commit the remote no longer has
+    # (force-pushed history) -- the matrix step below falls back to building
+    # everything instead of failing the push run: an over-build is
+    # recoverable, a red run that built nothing is not.
+    - name: Fetch push-diff base
+      id: base
+      if: github.event_name == 'push'
+      shell: bash
+      env:
+        BEFORE_SHA: ${{ github.event.before }}
+        GIT_TOKEN: ${{ inputs.token }}
+      # the cat-file guard is if-form, not an &&-list: under bash -e a
+      # failing &&-list left operand would abort the step instead of fetching
+      run: |
+        available=true
+        if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+          available=false
+        # already local (e.g. a deeper checkout): nothing to fetch
+        elif ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+          auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
+          GIT_CONFIG_COUNT=1 \
+          GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+            git fetch --depth=1 --no-tags origin "$BEFORE_SHA" || available=false
+        fi
+        echo "available=${available}" >> "$GITHUB_OUTPUT"
+
+    # workflow_dispatch has no diff to filter; the matrix step selects by the
+    # dispatch-images input instead (empty = all). Skipped too when a push
+    # has no reachable diff base (see the step above) -- its own fetch would
+    # hit the same wall, and the matrix step builds everything.
+    - name: Detect changed paths
+      id: filter
+      if: github.event_name != 'workflow_dispatch' && steps.base.outputs.available != 'false'
+      uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+      with:
+        token: ${{ inputs.token }}
+        base: ${{ inputs.base != '' && inputs.base || (github.event_name == 'push' && github.ref_name || '') }}
+        filters: ${{ inputs.filters }}
+
+    # The matrix is the set of images whose filter matched; on
+    # workflow_dispatch (whose skipped filter step leaves changes empty) it
+    # is instead the images named in the dispatch-images input, or all of
+    # them when the input is empty -- an unknown key fails the run loudly,
+    # so a typo'd dispatch cannot produce a green run that rebuilt nothing.
+    - name: Compute build matrix
+      id: matrix
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        IMAGES_JSON: ${{ inputs.images }}
+        DISPATCH_IMAGES: ${{ inputs.dispatch-images }}
+        BASE_AVAILABLE: ${{ steps.base.outputs.available }}
+        CHANGED_KEYS: ${{ steps.filter.outputs.changes }}
+      run: |
+        set -euo pipefail
+        matrix=$(jq -cn '
+          (env.DISPATCH_IMAGES | split(",") | map(gsub("\\s"; "")) | map(select(. != ""))) as $requested
+          | (env.CHANGED_KEYS | if . == null or . == "" then "[]" else . end | fromjson) as $changed
+          | (env.IMAGES_JSON | fromjson | to_entries
+             | map({key: .key, dockerfile_path: .value.dockerfile_path, image: .value.image, build_args: (.value.build_args // "")})) as $images
+          # any unknown requested key -- even alongside valid ones -- must
+          # fail loudly, not silently build the subset that parsed
+          | ($requested - ($images | map(.key))) as $unknown
+          | if ($unknown | length) > 0
+            then error("unknown image key(s): " + ($unknown | join(", ")))
+            else $images end
+          | map(select(
+              if env.EVENT_NAME == "workflow_dispatch"
+              then ($requested == [] or (.key | IN($requested[])))
+              elif env.EVENT_NAME == "push" and env.BASE_AVAILABLE == "false"
+              # no diff base to filter against (see the fetch step): build
+              # everything rather than fail or skip the push
+              then true
+              else (.key | IN($changed[]))
+              end))
+          | map(del(.key))
+        ')
+        echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+        echo "any_images=$(jq -c 'length > 0' <<<"$matrix")" >> "$GITHUB_OUTPUT"
+        echo "changed_keys=${CHANGED_KEYS:-[]}" >> "$GITHUB_OUTPUT"
