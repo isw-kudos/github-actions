@@ -56,7 +56,7 @@ Builds from the checked-out workspace (so `.dockerignore` applies) and pushes `g
 | `pull_request` | `pr-<number>`, `sha-<PR head sha>` |
 | push of a git tag | `<tag>`, `sha-<full commit sha>` |
 
-Every build also carries the `org.opencontainers.image.*` labels and index annotations (`revision` is the same sha as the tag), so a manifest can be traced to its commit. Never `latest`, never a date. The `tag` input is deprecated: when set, its value is pushed as one more tag so callers written for v1.0.0 keep working. Outputs: `digest` and `tags` (one pushed reference per line).
+`runner` picks where the job runs (default `ubuntu-latest`). A Blacksmith label (`blacksmith-*`) also swaps the registry build cache for Blacksmith's persistent builder cache (`useblacksmith/setup-docker-builder` + `useblacksmith/build-push-action`, keyed per image). Every build also carries the `org.opencontainers.image.*` labels and index annotations (`revision` is the same sha as the tag), so a manifest can be traced to its commit. Never `latest`, never a date. The `tag` input is deprecated: when set, its value is pushed as one more tag so callers written for v1.0.0 keep working. Outputs: `digest` and `tags` (one pushed reference per line).
 
 When the calling repo has a `.gitmodules` file, it mints a GitHub App token scoped to the calling repo and its same-owner submodules to check them out; the app client id comes from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Grant exactly `contents: read` and `packages: write` on the calling job; a smaller grant fails the run at startup.
 
