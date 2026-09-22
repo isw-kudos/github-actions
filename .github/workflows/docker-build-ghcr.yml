@@ -77,10 +77,10 @@ jobs:
     # GitHub validates this grant against the caller's: a caller granting less
     # fails at startup with no logs, so every entry here is one every caller
     # must hold. Deliberately no `id-token: write` - nothing below requests an
-    # OIDC token (no signing, no attestations, default buildx driver).
+    # OIDC token on either build path (no signing, no attestations).
     permissions:
       contents: read # checkout the calling repo
-      packages: write # push the image and build cache to ghcr.io
+      packages: write # push the image (and, on the buildx path, its build cache) to ghcr.io
     outputs:
       digest: ${{ steps.build_push.outputs.digest || steps.build_push_blacksmith.outputs.digest }}
       tags: ${{ steps.meta.outputs.tags }}
@@ -158,7 +158,10 @@ jobs:
       # build. One key per image, because a cache only helps builds that share
       # layers and unrelated images on one key evict each other. Without this
       # step useblacksmith/build-push-action falls back to the default builder
-      # and caches nothing.
+      # and caches nothing. The default `nofallback: false` is kept on purpose:
+      # if Blacksmith's builder cannot be set up, the step falls back to a
+      # local uncached builder and the image still ships, rather than failing
+      # the build over a cache.
       - name: Set up Blacksmith Docker builder
         if: ${{ startsWith(inputs.runner, 'blacksmith') }}
         uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
