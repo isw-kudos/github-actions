@@ -28,6 +28,14 @@ on:
         description: Image name; pushed as ghcr.io/<repository owner>/<image>
         required: true
         type: string
+      runner:
+        default: ubuntu-latest
+        description: >-
+          Runner label for the build job. A Blacksmith label (blacksmith-*)
+          also builds with Blacksmith's persistent-disk layer cache instead of
+          the ghcr.io registry cache.
+        required: false
+        type: string
       tag:
         description: >-
           Deprecated. Tags are generated from the event (branch name, pr-N,
@@ -65,16 +73,16 @@ permissions: {}
 jobs:
   build:
     name: Build & Push
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner }}
     # GitHub validates this grant against the caller's: a caller granting less
     # fails at startup with no logs, so every entry here is one every caller
     # must hold. Deliberately no `id-token: write` - nothing below requests an
-    # OIDC token (no signing, no attestations, default buildx driver).
+    # OIDC token on either build path (no signing, no attestations).
     permissions:
       contents: read # checkout the calling repo
-      packages: write # push the image and build cache to ghcr.io
+      packages: write # push the image (and, on the buildx path, its build cache) to ghcr.io
     outputs:
-      digest: ${{ steps.build_push.outputs.digest }}
+      digest: ${{ steps.build_push.outputs.digest || steps.build_push_blacksmith.outputs.digest }}
       tags: ${{ steps.meta.outputs.tags }}
     steps:
       - name: Checkout code
@@ -140,7 +148,26 @@ jobs:
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker Buildx
+        if: ${{ !startsWith(inputs.runner, 'blacksmith') }}
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Blacksmith keeps the builder's state (layers and RUN cache mounts) on a
+      # persistent disk scoped to the repository and cache-key, so there is
+      # nothing to import or export and the registry cache is skipped on this
+      # path: exporting it would only upload the whole cache blob on every
+      # build. One key per image, because a cache only helps builds that share
+      # layers and unrelated images on one key evict each other. Without this
+      # step useblacksmith/build-push-action falls back to the default builder
+      # and caches nothing. The default `nofallback: false` is kept on purpose:
+      # if Blacksmith's builder cannot be set up, the step falls back to a
+      # local uncached builder and the image still ships, rather than failing
+      # the build over a cache.
+      - name: Set up Blacksmith Docker builder
+        if: ${{ startsWith(inputs.runner, 'blacksmith') }}
+        uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
+        with:
+          cache-key: ${{ inputs.image }}
+          platforms: ${{ inputs.architecture }}
 
       # One tag set for every caller, derived from the event: the branch name
       # on a branch push (`main`, `dev`), `pr-N` on a pull request, the git tag
@@ -170,7 +197,11 @@ jobs:
             type=sha,format=long
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
 
+      # Two build steps, one per builder: `uses:` cannot vary by runner, and
+      # the inputs are the same except for the cache. The job's `digest`
+      # output takes whichever ran.
       - name: Build & Push Docker Image
+        if: ${{ !startsWith(inputs.runner, 'blacksmith') }}
         id: build_push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -183,6 +214,21 @@ jobs:
           build-args: ${{ inputs.build_args }}
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}-buildcache:latest
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}-buildcache:latest,mode=max,oci-mediatypes=true,image-manifest=true
+          file: ${{ inputs.dockerfile_path }}
+          platforms: ${{ inputs.architecture }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+
+      - name: Build & Push Docker Image (Blacksmith)
+        if: ${{ startsWith(inputs.runner, 'blacksmith') }}
+        id: build_push_blacksmith
+        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
+        with:
+          # workspace context for the same .dockerignore reason as above
+          context: ${{ inputs.context }}
+          push: true
+          build-args: ${{ inputs.build_args }}
           file: ${{ inputs.dockerfile_path }}
           platforms: ${{ inputs.architecture }}
           tags: ${{ steps.meta.outputs.tags }}
