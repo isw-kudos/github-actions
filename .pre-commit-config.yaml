@@ -26,6 +26,12 @@ repos:
         args: [--persona, regular, --offline]
   - repo: local
     hooks:
+      - id: wait-for-required-checks-tests
+        name: wait-for-required-checks unit tests
+        language: system
+        entry: node .github/actions/wait-for-required-checks/index.test.cjs
+        files: ^\.github/actions/wait-for-required-checks/
+        pass_filenames: false
       - id: component-scope-check
         name: Check versioned component scope in commit message
         language: script
