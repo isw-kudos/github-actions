@@ -22,9 +22,12 @@ inputs:
     required: true
   grace-seconds:
     description: >-
-      Seconds to wait for a check to first appear on the head SHA before
-      treating it as not-applicable. Set high enough to absorb GitHub event
-      scheduling latency for the slowest source workflow.
+      Seconds of quiet (no start or completion of ANY listed check) to wait
+      for a check to first appear on the head SHA before treating it as
+      not-applicable. The window re-arms on every activity, so a check that
+      only registers after another one completes (a dynamic-matrix job) is
+      still waited for; the same window lets a cancelled run be superseded by
+      its replacement before the cancellation counts as a failure.
     required: false
     default: "90"
   poll-seconds:

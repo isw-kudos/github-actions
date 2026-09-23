@@ -85,15 +85,25 @@ that the gate runs on every PR.
 ## Resolution rules
 
 For each required check, the action picks the most recent matching check-run
-(sorted by `started_at`) and applies:
+(sorted by `started_at`) **that has a real result** -- a `skipped` run never
+supersedes an earlier genuine result of the same check (a workflow that skips
+its jobs on unrelated events, e.g. a label add, must not launder a red check
+green); only when every run of a name is skipped does the skip stand. Grace is
+measured as *quiet time*: seconds since the newest start or completion of any
+listed check (or since the gate started, whichever is later), so a check that
+registers late -- a dynamic-matrix job that cannot exist until its parent
+completes -- re-arms the window instead of being latched not-applicable.
+Nothing is latched: every poll reclassifies every name from the live list.
 
-| Latest check state | Action |
+| Latest real check state | Action |
 |---|---|
-| Absent, elapsed < `grace-seconds` | keep waiting |
-| Absent, elapsed >= `grace-seconds` | treat as not-applicable (success) -- source workflow's `paths:` excluded this PR |
+| Absent, quiet < `grace-seconds` | keep waiting |
+| Absent, quiet >= `grace-seconds` | treat as not-applicable (success) -- source workflow's `paths:` excluded this PR |
 | `queued` / `in_progress` / `pending` / `waiting` | keep waiting |
 | `completed` + `success` / `skipped` / `neutral` | success |
-| `completed` + `failure` / `cancelled` / `timed_out` / `action_required` | gate fails immediately, naming the failed check |
+| `completed` + `cancelled`, quiet < `grace-seconds` | keep waiting -- a superseding run usually follows a cancellation |
+| `completed` + `cancelled`, quiet >= `grace-seconds` | gate fails, naming the cancelled check |
+| `completed` + `failure` / `timed_out` / `action_required` | gate fails immediately, naming the failed check |
 | Total elapsed > `max-wait-seconds` | gate fails with a timeout error |
 
 ### Listed checks must run on draft PRs
@@ -104,8 +114,10 @@ gated with `if: github.event.pull_request.draft == false` registers a `skipped`
 run on a draft PR, the gate passes for that head SHA, and `ready_for_review` is
 not a default `pull_request_target` activity type -- so nothing re-evaluates
 when the PR is marked ready. Adding `ready_for_review` to the gate's `types:`
-does not close this either: the gate polls immediately and the latest run on the
-SHA is still the completed `skipped` one.
+only closes this for a source workflow that itself re-runs on
+`ready_for_review` (the new run is a real result and supersedes the skip); a
+workflow that stays silent on that event still resolves to its completed
+`skipped` run.
 
 **Do not draft-gate (or otherwise conditionally skip) any workflow whose check
 is listed in `required-checks`.** Path filters on the source workflow's `on:`
@@ -114,6 +126,6 @@ are fine -- that is the not-applicable case this action exists to handle.
 ## Testing
 
 `index.cjs` exports its pure helpers (`parseNames`, `latestFor`,
-`classifyLatest`, `nextLink`) and only runs the poll loop when invoked
-directly, so the resolution rules can be unit-tested with plain `node` -- no
-runner required.
+`classifyLatest`, `newestActivityMs`, `nextLink`) and only runs the poll loop
+when invoked directly. `index.test.cjs` covers the resolution rules with plain
+`node` -- no runner, no dependencies -- and runs in pre-commit.
