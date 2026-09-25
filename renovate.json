@@ -25,12 +25,32 @@
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the actionlint-py pin (PyPI wheel bundling the actionlint CLI; version is <actionlint>.<build>, so the org `# renovate:` annotation manager's 3-part version regex cannot claim it) in the actionlint.yml workflow env and the Claude PostToolUse hook, plus the shellcheck-py additional dependency of the pre-commit actionlint hook. The pre-commit `rev:` itself is tracked by the built-in pre-commit manager; the actionlint packageRule below groups both so every layer lints with the same CLI.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/actionlint\\.yml$/",
+        "/^\\.claude/hooks/actionlint-check\\.sh$/",
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "ACTIONLINT_VERSION[=:]\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)",
+        "(?<depName>shellcheck-py)==(?<currentValue>\\d+(?:\\.\\d+)+)"
+      ],
+      "depNameTemplate": "actionlint-py",
+      "datasourceTemplate": "pypi"
     }
   ],
   "packageRules": [
     {
       "matchCategories": ["python"],
       "groupName": "python dependencies"
+    },
+    {
+      "description": "actionlint - one branch for the pre-commit rev (github-tags) and the PyPI pin in the workflow and Claude hook, so CI, pre-commit and the agent never lint with different actionlint versions.",
+      "groupName": "actionlint",
+      "matchPackageNames": ["actionlint-py", "Mateusz-Grzelinski/actionlint-py"]
     },
     {
       "description": "Branch automerge for non-majors: merge the green branch without opening a PR at all - the cheapest possible path for this repo's lightweight CI.",

@@ -24,6 +24,19 @@ repos:
     hooks:
       - id: zizmor
         args: [--persona, regular, --offline]
+  # Workflow syntax / expression / context lint — what zizmor does not check
+  # (e.g. `${{ runner.temp }}` in job-level env, which GitHub cannot parse).
+  # actionlint-py ships the actionlint binary as a wheel, so no Go toolchain or
+  # Docker is needed on developer machines or CI; shellcheck-py does the same
+  # for the shellcheck integration so `run:` blocks are checked here exactly
+  # as in CI's actionlint.yml (whose runner has shellcheck preinstalled).
+  # Renovate tracks the rev (pre-commit manager) and the shellcheck-py pin
+  # (the actionlint custom manager in renovate.json).
+  - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
+    rev: v1.7.12.25
+    hooks:
+      - id: actionlint
+        additional_dependencies: [shellcheck-py==0.11.0.1]
   - repo: local
     hooks:
       - id: wait-for-required-checks-tests

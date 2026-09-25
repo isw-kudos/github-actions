@@ -79,13 +79,18 @@ This is the house style for **all** `run:` blocks in this repo, including low-ri
 
 ## 5. Scan workflows automatically
 
-Three layers, all pinned to the same zizmor CLI version:
+Two tools, three layers each, every layer pinned to the same CLI version (Renovate bumps all pins of a tool together):
 
-- **CI** — `.github/workflows/zizmor.yml` runs `zizmorcore/zizmor-action` on every `.github/workflows/**` / `.github/actions/**` change and on push to `main`. `advanced-security: false` → GitHub annotations + **fails the job on findings** (SARIF needs GHAS, which a private repo lacks).
-- **pre-commit** — the `zizmor` hook in `.pre-commit-config.yaml` audits staged workflow files (offline, regular persona) before commit.
-- **Claude hook** — `.claude/hooks/zizmor-check.sh` (PostToolUse) re-audits any workflow file Claude edits, immediately surfacing findings.
+- **zizmor** — security: unpinned actions, template/script injection, dangerous `pull_request_target`, excessive permissions, `secrets: inherit`, cache/artifact issues.
+- **actionlint** — correctness: YAML/schema, expression syntax, **context availability**, action input names, `needs`/`outputs` references, shellcheck of `run:` blocks. zizmor does not parse expressions for context validity, so `${{ runner.temp }}` in job-level `env:` (GitHub cannot parse the workflow at all; a broken component still got tagged) passed every zizmor gate and only actionlint reports it.
 
-Don't fix a zizmor failure by silencing it — fix the workflow, or add a justified `# zizmor: ignore[rule]` end-of-line comment with a reason. Keep the action, its `version:` input, and the pre-commit `rev:` pinned; Renovate bumps all three.
+| Layer | zizmor | actionlint |
+|---|---|---|
+| **CI** (every `.github/workflows/**` / `.github/actions/**` change, push to `main`; both required checks) | `.github/workflows/zizmor.yml` runs `zizmorcore/zizmor-action` with `advanced-security: false` → annotations + **fails on findings** | `.github/workflows/actionlint.yml` runs the pinned `actionlint-py` wheel via `pipx` (no third-party action, no Go toolchain) with the shipped problem matcher → annotations + fails on findings; shellcheck is on the runner image |
+| **pre-commit** | `zizmor` hook (offline, regular persona) | `actionlint` hook from `Mateusz-Grzelinski/actionlint-py`, with `shellcheck-py` as an additional dependency so `run:` blocks get the same coverage as CI |
+| **Claude hook** (PostToolUse on any workflow file Claude edits) | `.claude/hooks/zizmor-check.sh` | `.claude/hooks/actionlint-check.sh` (shellcheck only if on PATH; the other layers still enforce it) |
+
+Don't fix a finding by silencing it — fix the workflow. If a finding is genuinely a false positive, add a justified `# zizmor: ignore[rule]` end-of-line comment, or for actionlint a commented regex under `paths:` → `ignore:` in `.github/actionlint.yaml` (e.g. the `$/` self-repository `uses:` syntax actionlint does not know yet). Keep the zizmor action + `version:` input, the actionlint `ACTIONLINT_VERSION` pins, and both pre-commit `rev:`s pinned; Renovate bumps them.
 
 ## 6. Other defaults
 
@@ -104,3 +109,4 @@ Don't fix a zizmor failure by silencing it — fix the workflow, or add a justif
 - [ ] No `${{ }}` expressions inside `run:` — everything goes through `env:`
 - [ ] `persist-credentials: false` on checkouts that don't push
 - [ ] `zizmor --persona regular --offline .github/workflows/` reports no findings
+- [ ] `actionlint` (via `uvx --from actionlint-py==<pinned> actionlint`, or `pre-commit run actionlint --all-files`) reports no findings

@@ -1,0 +1,10 @@
+# actionlint configuration. Reference:
+# https://github.com/rhysd/actionlint/blob/main/docs/config.md
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      # `uses: $/<path>` is the self-repository ref (runner >= 2.336.0) that
+      # required-checks.yml and the test workflows rely on. actionlint 1.7.12
+      # does not know the syntax yet (rhysd/actionlint#711); drop this entry
+      # once a release accepts it.
+      - 'specifying action "\$/.+" in invalid format because ref is missing'

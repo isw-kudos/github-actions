@@ -1,0 +1,53 @@
+name: Workflow Lint (actionlint)
+
+# Syntax, expression and context validation of GitHub Actions workflows, plus
+# shellcheck of `run:` blocks. Complements zizmor.yml (security): zizmor does
+# not parse expressions for context availability, so a `${{ runner.temp }}` in
+# job-level `env:` (which GitHub refuses to parse, killing the whole workflow)
+# passes zizmor and only actionlint reports it.
+#
+# The CLI comes from the actionlint-py wheel (bundles the Go binary) via pipx,
+# which ubuntu-latest ships, so no third-party action needs allow-listing and
+# no Go toolchain is installed. shellcheck is also on the runner image, so the
+# shellcheck integration is active here; the pre-commit hook adds shellcheck-py
+# for the same coverage on developer machines.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/actionlint.yaml"
+      - ".github/actionlint-matcher.json"
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout the repo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        env:
+          # actionlint-py version (<actionlint>.<package build>). Renovate bumps
+          # it together with the pre-commit `rev:` and the Claude hook pin
+          # (the "actionlint" group in renovate.json).
+          ACTIONLINT_VERSION: 1.7.12.25
+        run: |
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          pipx run --spec "actionlint-py==$ACTIONLINT_VERSION" actionlint -color
