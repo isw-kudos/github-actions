@@ -247,11 +247,15 @@ jobs:
       # and GITHUB_TOKEN authenticates there (once the calling repository has
       # read access on the package). Another registry would need its own
       # credentials input.
-      # HELM_REGISTRY_CONFIG keeps the login in a job-scoped file. Without it
-      # Helm stores credentials through ~/.docker/config.json, and on a runner
-      # whose Docker config names a credential store (the gcloud runner's
-      # `secretservice`) the login dies with "Cannot autolaunch D-Bus without
-      # X11 $DISPLAY". The deploy step reads the same file.
+      # The credential lives in a job-scoped registry config that is written
+      # with the auth entry already in it. Helm's credential store (ORAS) only
+      # uses the plain file when the file already holds credentials; an empty
+      # or missing file makes it detect a native credential helper from the
+      # runner's PATH instead, and on the gcloud runner that is
+      # docker-credential-secretservice, which dies headless with "Cannot
+      # autolaunch D-Bus without X11 $DISPLAY". The login afterwards only
+      # verifies the token against the registry. The deploy step reads the
+      # same file, and nothing touches the runner user's home.
       - name: Log in to ghcr.io
         if: startsWith(inputs.chart, 'oci://ghcr.io/')
         shell: bash
@@ -261,7 +265,12 @@ jobs:
           # ghcr.io ignores the username when the password is a GITHUB_TOKEN;
           # the org name keeps the log from suggesting a person's credentials.
           USERNAME: ${{ github.repository_owner }}
-        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$USERNAME" --password-stdin
+        run: |
+          set -euo pipefail
+          umask 077
+          auth=$(printf '%s:%s' "$USERNAME" "$GITHUB_TOKEN" | base64 | tr -d '\n')
+          printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HELM_REGISTRY_CONFIG"
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$USERNAME" --password-stdin
 
       # BUILD_NUMBER only forces a pod rollout when its value changes, so it
       # uses run_id (unique per run across the repo) rather than run_number,
