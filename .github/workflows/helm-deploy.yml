@@ -140,17 +140,6 @@ jobs:
       contents: read # checkout the config repository
       id-token: write # OIDC token for google-github-actions/auth (target=gke)
       packages: read # helm registry login ghcr.io for oci://ghcr.io/ charts
-    # Helm never touches the runner user's home: an OCI chart is pulled into
-    # the Helm cache, and on the gcloud runner $HOME is a directory that does
-    # not exist and cannot be created ("mkdir /home/github: permission
-    # denied"). A local chart path never needed the cache, which is why the
-    # devops-checkout deploys never hit this. The registry config is the same
-    # job-scoped file for the login and the deploy.
-    env:
-      HELM_CACHE_HOME: ${{ runner.temp }}/helm/cache
-      HELM_CONFIG_HOME: ${{ runner.temp }}/helm/config
-      HELM_DATA_HOME: ${{ runner.temp }}/helm/data
-      HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm/registry.json
     steps:
       # `secrets` is not available in step `if:`, so their presence is checked
       # here as booleans; the secret values themselves never enter this step.
@@ -253,6 +242,23 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.3.0
+
+      # Helm never touches the runner user's home: an OCI chart is pulled into
+      # the Helm cache, and on the gcloud runner $HOME is a directory that does
+      # not exist and cannot be created ("mkdir /home/github: permission
+      # denied"). A local chart path never needed the cache, which is why the
+      # devops-checkout deploys never hit this. Exported through GITHUB_ENV
+      # because the runner context is not available in job-level env. The
+      # registry config is the same job-scoped file for the login and the deploy.
+      - name: Keep Helm's directories under the job temp dir
+        shell: bash
+        run: |
+          {
+            echo "HELM_CACHE_HOME=$RUNNER_TEMP/helm/cache"
+            echo "HELM_CONFIG_HOME=$RUNNER_TEMP/helm/config"
+            echo "HELM_DATA_HOME=$RUNNER_TEMP/helm/data"
+            echo "HELM_REGISTRY_CONFIG=$RUNNER_TEMP/helm/registry.json"
+          } >> "$GITHUB_ENV"
 
       # Only ghcr.io is covered: it is where isw-kudos/helm-charts publishes,
       # and GITHUB_TOKEN authenticates there (once the calling repository has
