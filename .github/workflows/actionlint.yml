@@ -23,6 +23,10 @@ on:
   push:
     branches:
       - main
+      # Renovate automerges its branches without a PR (renovate.json), so the
+      # full-tree lint must run there too or a toolchain bump that adds
+      # findings elsewhere lands on main unchecked; mirrors pre-commit.yml.
+      - renovate/**
   workflow_dispatch:
 
 permissions: {}
@@ -55,5 +59,8 @@ jobs:
           pipx install "actionlint-py==$ACTIONLINT_VERSION"
           pipx inject --include-apps actionlint-py "shellcheck-py==$SHELLCHECK_VERSION"
           BIN=$(pipx environment --value PIPX_BIN_DIR)
+          # actionlint silently disables the shellcheck rule if the binary is
+          # missing, so fail loudly here rather than pass `run:` blocks unchecked.
+          "$BIN/shellcheck" --version
           echo "::add-matcher::.github/actionlint-matcher.json"
           "$BIN/actionlint" -color -shellcheck "$BIN/shellcheck"

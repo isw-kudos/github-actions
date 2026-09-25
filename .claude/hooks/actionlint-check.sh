@@ -36,6 +36,13 @@ else
   exit 0
 fi
 
+# actionlint resolves the `paths:` globs in .github/actionlint.yaml against
+# the working directory, so lint from the repo root with a relative path or
+# the config (and its justified ignores) is silently skipped.
+ROOT=${FILE%/.github/workflows/*}
+cd "$ROOT" || exit 0
+FILE=${FILE#"$ROOT"/}
+
 if ! OUTPUT=$("$@" -no-color "$FILE" 2>&1); then
   {
     echo "actionlint found problems in $FILE — fix the workflow (see .claude/skills/gha-security/SKILL.md §5); do not silence findings without a justified ignore entry in .github/actionlint.yaml:"
