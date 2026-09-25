@@ -75,7 +75,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `docker-build.yml` | Build & push to ECR with multi-platform support and metadata tagging |
 | `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, tagged `<branch>` / `pr-N` plus `sha-<commit>` with OCI labels via `docker/metadata-action`, checking out private submodules via a GitHub App token when `.gitmodules` exists |
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
-| `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster, chart and values read from a config repo |
+| `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster; chart from `oci://ghcr.io/isw-kudos/charts` (logs in with `GITHUB_TOKEN`) or the config repo, values from the config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, OCI index and digest preserved, every source resolved before any tag moves and written by that digest |
 | `cleanup-images-ghcr.yml` | Delete stale versions of a list of ghcr.io packages (untagged by default, tag patterns on request) with `dataaxiom/ghcr-cleanup-action`, which keeps the untagged children every tagged OCI index references; dry run unless told otherwise |
