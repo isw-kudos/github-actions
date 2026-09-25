@@ -25,12 +25,47 @@
       "depNameTemplate": "zizmorcore/zizmor",
       "datasourceTemplate": "github-releases",
       "extractVersionTemplate": "^v?(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the actionlint-py pin (PyPI wheel bundling the actionlint CLI; version is <actionlint>.<build>, so the org `# renovate:` annotation manager's 3-part version regex cannot claim it) in the actionlint.yml workflow env and the Claude PostToolUse hook. The pre-commit `rev:` itself is tracked by the built-in pre-commit manager; the actionlint packageRule below groups them so every layer lints with the same CLI.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/actionlint\\.yml$/",
+        "/^\\.claude/hooks/actionlint-check\\.sh$/"
+      ],
+      "matchStrings": ["ACTIONLINT_VERSION[=:]\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "actionlint-py",
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the shellcheck-py pin actionlint uses for `run:` blocks, in the actionlint.yml workflow env and as the pre-commit actionlint hook's additional dependency. A separate manager from actionlint-py: a depNameTemplate overrides a captured depName group, so one manager cannot serve two packages. The built-in pre-commit manager only parses additional_dependencies when the hook declares `language:` explicitly; keep that key off the actionlint hook or both managers claim the line.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/actionlint\\.yml$/",
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "SHELLCHECK_VERSION[=:]\\s*(?<currentValue>\\d+(?:\\.\\d+)+)",
+        "shellcheck-py==(?<currentValue>\\d+(?:\\.\\d+)+)"
+      ],
+      "depNameTemplate": "shellcheck-py",
+      "datasourceTemplate": "pypi"
     }
   ],
   "packageRules": [
     {
       "matchCategories": ["python"],
       "groupName": "python dependencies"
+    },
+    {
+      "description": "actionlint toolchain - one branch for the pre-commit rev (github-tags), the actionlint-py pin in the workflow and Claude hook, and the shellcheck-py pin in the workflow and pre-commit config, so CI, pre-commit and the agent never lint with different versions.",
+      "groupName": "actionlint",
+      "matchPackageNames": ["actionlint-py", "Mateusz-Grzelinski/actionlint-py", "shellcheck-py"]
+    },
+    {
+      "description": "The pre-commit rev is a four-part tag (v<actionlint>.<build>). The default semver-coerced versioning drops the fourth component, so build-only bumps are never offered and same-CLI tags compare equal; loose orders all four numerically so the rev keeps pace with the PyPI pins.",
+      "matchPackageNames": ["Mateusz-Grzelinski/actionlint-py"],
+      "versioning": "loose"
     },
     {
       "description": "Branch automerge for non-majors: merge the green branch without opening a PR at all - the cheapest possible path for this repo's lightweight CI.",

@@ -1,0 +1,66 @@
+name: Workflow Lint (actionlint)
+
+# Syntax, expression and context validation of GitHub Actions workflows, plus
+# shellcheck of `run:` blocks. Complements zizmor.yml (security): zizmor does
+# not parse expressions for context availability, so a `${{ runner.temp }}` in
+# job-level `env:` (which GitHub refuses to parse, killing the whole workflow)
+# passes zizmor and only actionlint reports it.
+#
+# The CLI comes from the actionlint-py wheel (bundles the Go binary) via pipx,
+# which ubuntu-latest ships, so no third-party action needs allow-listing and
+# no Go toolchain is installed. shellcheck comes from the shellcheck-py wheel
+# injected into the same venv, pinned to the version the pre-commit hook uses,
+# rather than whatever the runner image ships, so `run:` blocks are checked
+# identically in CI and locally.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - ".github/actionlint.yaml"
+      - ".github/actionlint-matcher.json"
+  push:
+    branches:
+      - main
+      # Renovate automerges its branches without a PR (renovate.json), so the
+      # full-tree lint must run there too or a toolchain bump that adds
+      # findings elsewhere lands on main unchecked; mirrors pre-commit.yml.
+      - renovate/**
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout the repo
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run actionlint
+        env:
+          # actionlint-py version (<actionlint>.<package build>) and the
+          # shellcheck-py wheel used for `run:` blocks. Renovate bumps them
+          # together with the pre-commit `rev:` / pin and the Claude hook pin
+          # (the "actionlint" group in renovate.json).
+          ACTIONLINT_VERSION: 1.7.12.25
+          SHELLCHECK_VERSION: 0.11.0.1
+        run: |
+          pipx install "actionlint-py==$ACTIONLINT_VERSION"
+          pipx inject --include-apps actionlint-py "shellcheck-py==$SHELLCHECK_VERSION"
+          BIN=$(pipx environment --value PIPX_BIN_DIR)
+          # actionlint silently disables the shellcheck rule if the binary is
+          # missing, so fail loudly here rather than pass `run:` blocks unchecked.
+          "$BIN/shellcheck" --version
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          "$BIN/actionlint" -color -shellcheck "$BIN/shellcheck"

@@ -59,7 +59,7 @@ jobs:
 
           # Check if a valid digest was found
           if [[ "$DIGEST" =~ sha256 ]]; then
-            echo "image_digest=$DIGEST" >> $GITHUB_OUTPUT
+            echo "image_digest=$DIGEST" >> "$GITHUB_OUTPUT"
             echo "Using image digest: '$DIGEST'"
           else
             echo "::error::No image found for tag ${IMAGE_TAG}"
