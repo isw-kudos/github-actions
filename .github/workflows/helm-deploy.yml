@@ -252,8 +252,10 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          ACTOR: ${{ github.actor }}
-        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          # ghcr.io ignores the username when the password is a GITHUB_TOKEN;
+          # the org name keeps the log from suggesting a person's credentials.
+          USERNAME: ${{ github.repository_owner }}
+        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$USERNAME" --password-stdin
 
       # BUILD_NUMBER only forces a pod rollout when its value changes, so it
       # uses run_id (unique per run across the repo) rather than run_number,
