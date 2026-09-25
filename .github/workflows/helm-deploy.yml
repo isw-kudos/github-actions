@@ -247,10 +247,16 @@ jobs:
       # and GITHUB_TOKEN authenticates there (once the calling repository has
       # read access on the package). Another registry would need its own
       # credentials input.
+      # HELM_REGISTRY_CONFIG keeps the login in a job-scoped file. Without it
+      # Helm stores credentials through ~/.docker/config.json, and on a runner
+      # whose Docker config names a credential store (the gcloud runner's
+      # `secretservice`) the login dies with "Cannot autolaunch D-Bus without
+      # X11 $DISPLAY". The deploy step reads the same file.
       - name: Log in to ghcr.io
         if: startsWith(inputs.chart, 'oci://ghcr.io/')
         shell: bash
         env:
+          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm-registry.json
           GITHUB_TOKEN: ${{ github.token }}
           # ghcr.io ignores the username when the password is a GITHUB_TOKEN;
           # the org name keeps the log from suggesting a person's credentials.
@@ -266,6 +272,7 @@ jobs:
       - name: Deploy
         shell: bash
         env:
+          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm-registry.json
           CHART: ${{ inputs.chart }}
           VALUES: ${{ inputs.values }}
           NAMESPACE: ${{ inputs.namespace }}
