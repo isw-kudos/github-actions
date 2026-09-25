@@ -8,9 +8,10 @@ name: Workflow Lint (actionlint)
 #
 # The CLI comes from the actionlint-py wheel (bundles the Go binary) via pipx,
 # which ubuntu-latest ships, so no third-party action needs allow-listing and
-# no Go toolchain is installed. shellcheck is also on the runner image, so the
-# shellcheck integration is active here; the pre-commit hook adds shellcheck-py
-# for the same coverage on developer machines.
+# no Go toolchain is installed. shellcheck comes from the shellcheck-py wheel
+# injected into the same venv, pinned to the version the pre-commit hook uses,
+# rather than whatever the runner image ships, so `run:` blocks are checked
+# identically in CI and locally.
 
 on:
   pull_request:
@@ -44,10 +45,15 @@ jobs:
 
       - name: Run actionlint
         env:
-          # actionlint-py version (<actionlint>.<package build>). Renovate bumps
-          # it together with the pre-commit `rev:` and the Claude hook pin
+          # actionlint-py version (<actionlint>.<package build>) and the
+          # shellcheck-py wheel used for `run:` blocks. Renovate bumps them
+          # together with the pre-commit `rev:` / pin and the Claude hook pin
           # (the "actionlint" group in renovate.json).
           ACTIONLINT_VERSION: 1.7.12.25
+          SHELLCHECK_VERSION: 0.11.0.1
         run: |
+          pipx install "actionlint-py==$ACTIONLINT_VERSION"
+          pipx inject --include-apps actionlint-py "shellcheck-py==$SHELLCHECK_VERSION"
+          BIN=$(pipx environment --value PIPX_BIN_DIR)
           echo "::add-matcher::.github/actionlint-matcher.json"
-          pipx run --spec "actionlint-py==$ACTIONLINT_VERSION" actionlint -color
+          "$BIN/actionlint" -color -shellcheck "$BIN/shellcheck"

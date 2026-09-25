@@ -28,10 +28,10 @@ repos:
   # (e.g. `${{ runner.temp }}` in job-level env, which GitHub cannot parse).
   # actionlint-py ships the actionlint binary as a wheel, so no Go toolchain or
   # Docker is needed on developer machines or CI; shellcheck-py does the same
-  # for the shellcheck integration so `run:` blocks are checked here exactly
-  # as in CI's actionlint.yml (whose runner has shellcheck preinstalled).
-  # Renovate tracks the rev (pre-commit manager) and the shellcheck-py pin
-  # (the actionlint custom manager in renovate.json).
+  # for the shellcheck integration. CI's actionlint.yml installs the same two
+  # pins, so `run:` blocks are checked identically here and there. Renovate
+  # tracks the rev (pre-commit manager) and the shellcheck-py pin (the
+  # shellcheck-py custom manager in renovate.json), grouped as "actionlint".
   - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
     rev: v1.7.12.25
     hooks:

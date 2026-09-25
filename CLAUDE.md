@@ -91,7 +91,7 @@ GitHub Actions workflows are validated by two tools at three layers, each tool p
 - **actionlint** (correctness): YAML/schema errors, expression syntax, context availability (e.g. `${{ runner.temp }}` in job-level `env:`, which GitHub refuses to parse and zizmor does not see), action input names, and shellcheck of `run:` blocks. Config and justified ignores live in `.github/actionlint.yaml`.
 
 1. **CI** — `.github/workflows/zizmor.yml` and `.github/workflows/actionlint.yml` run on every `.github/workflows/**` / `.github/actions/**` change and on push to `main`; both fail on findings and both are in the required-checks gate.
-2. **pre-commit** — the `zizmor` and `actionlint` hooks in `.pre-commit-config.yaml` check staged workflow files (zizmor offline, regular persona; actionlint with shellcheck-py).
+2. **pre-commit** — the `zizmor` and `actionlint` hooks in `.pre-commit-config.yaml` check staged workflow files (zizmor offline, regular persona; actionlint with the same shellcheck-py pin as CI).
 3. **Claude hooks** — `.claude/hooks/zizmor-check.sh` and `.claude/hooks/actionlint-check.sh` (PostToolUse) re-check any workflow file Claude edits.
 
 Load the `gha-security` skill (`.claude/skills/gha-security/SKILL.md`) before creating or editing anything under `.github/workflows/` or `.github/actions/` — it covers SHA pinning, trigger selection, least-privilege permissions (including `permission-*` inputs on `create-github-app-token`), and the env-var indirection rule for `run:` blocks. Never fix a zizmor or actionlint failure by silencing it; fix the workflow, or add a justified `# zizmor: ignore[rule]` comment / `.github/actionlint.yaml` ignore entry.
