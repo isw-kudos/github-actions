@@ -9,10 +9,11 @@ name: Helm Deploy
 # checked out with a GitHub App token whose client id comes from the caller's
 # HUDDO_DEVOPS_GITHUB_APP_ID variable, scoped to that one repository.
 #
-# Charts come from a registry (`chart: oci://ghcr.io/isw-kudos/charts/<name>`
-# with `--version <x.y.z>` in helm_args) or from the config checkout; for a
-# ghcr.io chart the job logs in with its own GITHUB_TOKEN, so the calling
-# repository must have been granted read access on that package.
+# Charts come from a registry (`chart: oci://ghcr.io/isw-kudos/charts/<name>:<x.y.z>`,
+# version as the tag so one line carries both and Renovate can bump it) or
+# from the config checkout; for a ghcr.io chart the job logs in with its own
+# GITHUB_TOKEN, so the calling repository must have been granted read access
+# on that package.
 #
 # The calling job must grant exactly `contents: read`, `id-token: write` and
 # `packages: read`; a smaller grant fails the run at startup with no logs.
@@ -47,10 +48,9 @@ on:
         type: string
       chart:
         description: >-
-          Chart to deploy: an OCI reference such as
-          oci://ghcr.io/isw-kudos/charts/huddo-boards (pin it with --version in
-          helm_args; the job logs in to ghcr.io with GITHUB_TOKEN), or a path
-          relative to the config checkout
+          Chart to deploy: an OCI reference with the version as its tag, e.g.
+          oci://ghcr.io/isw-kudos/charts/huddo-boards:2.2.1 (the job logs in to
+          ghcr.io with GITHUB_TOKEN), or a path relative to the config checkout
         required: true
         type: string
       values:
