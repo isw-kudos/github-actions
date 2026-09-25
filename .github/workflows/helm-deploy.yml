@@ -140,6 +140,17 @@ jobs:
       contents: read # checkout the config repository
       id-token: write # OIDC token for google-github-actions/auth (target=gke)
       packages: read # helm registry login ghcr.io for oci://ghcr.io/ charts
+    # Helm never touches the runner user's home: an OCI chart is pulled into
+    # the Helm cache, and on the gcloud runner $HOME is a directory that does
+    # not exist and cannot be created ("mkdir /home/github: permission
+    # denied"). A local chart path never needed the cache, which is why the
+    # devops-checkout deploys never hit this. The registry config is the same
+    # job-scoped file for the login and the deploy.
+    env:
+      HELM_CACHE_HOME: ${{ runner.temp }}/helm/cache
+      HELM_CONFIG_HOME: ${{ runner.temp }}/helm/config
+      HELM_DATA_HOME: ${{ runner.temp }}/helm/data
+      HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm/registry.json
     steps:
       # `secrets` is not available in step `if:`, so their presence is checked
       # here as booleans; the secret values themselves never enter this step.
@@ -247,20 +258,17 @@ jobs:
       # and GITHUB_TOKEN authenticates there (once the calling repository has
       # read access on the package). Another registry would need its own
       # credentials input.
-      # The credential lives in a job-scoped registry config that is written
-      # with the auth entry already in it. Helm's credential store (ORAS) only
-      # uses the plain file when the file already holds credentials; an empty
-      # or missing file makes it detect a native credential helper from the
-      # runner's PATH instead, and on the gcloud runner that is
-      # docker-credential-secretservice, which dies headless with "Cannot
-      # autolaunch D-Bus without X11 $DISPLAY". The login afterwards only
-      # verifies the token against the registry. The deploy step reads the
-      # same file, and nothing touches the runner user's home.
+      # The credential is written into the job-scoped registry config with the
+      # auth entry already in it. Helm's credential store (ORAS) only uses the
+      # plain file when the file already holds credentials; an empty or missing
+      # file makes it detect a native credential helper from the runner's PATH
+      # instead, and on the gcloud runner that is docker-credential-secretservice,
+      # which dies headless with "Cannot autolaunch D-Bus without X11 $DISPLAY".
+      # The login afterwards only verifies the token against the registry.
       - name: Log in to ghcr.io
         if: startsWith(inputs.chart, 'oci://ghcr.io/')
         shell: bash
         env:
-          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm-registry.json
           GITHUB_TOKEN: ${{ github.token }}
           # ghcr.io ignores the username when the password is a GITHUB_TOKEN;
           # the org name keeps the log from suggesting a person's credentials.
@@ -268,6 +276,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          mkdir -p "$(dirname "$HELM_REGISTRY_CONFIG")"
           auth=$(printf '%s:%s' "$USERNAME" "$GITHUB_TOKEN" | base64 | tr -d '\n')
           printf '{"auths":{"ghcr.io":{"auth":"%s"}}}\n' "$auth" > "$HELM_REGISTRY_CONFIG"
           echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$USERNAME" --password-stdin
@@ -281,7 +290,6 @@ jobs:
       - name: Deploy
         shell: bash
         env:
-          HELM_REGISTRY_CONFIG: ${{ runner.temp }}/helm-registry.json
           CHART: ${{ inputs.chart }}
           VALUES: ${{ inputs.values }}
           NAMESPACE: ${{ inputs.namespace }}
