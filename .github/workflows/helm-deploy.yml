@@ -9,8 +9,13 @@ name: Helm Deploy
 # checked out with a GitHub App token whose client id comes from the caller's
 # HUDDO_DEVOPS_GITHUB_APP_ID variable, scoped to that one repository.
 #
-# The calling job must grant exactly `contents: read` and `id-token: write`;
-# a smaller grant fails the run at startup with no logs.
+# Charts come from a registry (`chart: oci://ghcr.io/isw-kudos/charts/<name>`
+# with `--version <x.y.z>` in helm_args) or from the config checkout; for a
+# ghcr.io chart the job logs in with its own GITHUB_TOKEN, so the calling
+# repository must have been granted read access on that package.
+#
+# The calling job must grant exactly `contents: read`, `id-token: write` and
+# `packages: read`; a smaller grant fails the run at startup with no logs.
 
 on:
   workflow_call:
@@ -41,7 +46,11 @@ on:
         required: false
         type: string
       chart:
-        description: Chart to deploy, as a path relative to the config checkout or any reference helm accepts
+        description: >-
+          Chart to deploy: an OCI reference such as
+          oci://ghcr.io/isw-kudos/charts/huddo-boards (pin it with --version in
+          helm_args; the job logs in to ghcr.io with GITHUB_TOKEN), or a path
+          relative to the config checkout
         required: true
         type: string
       values:
@@ -130,6 +139,7 @@ jobs:
     permissions:
       contents: read # checkout the config repository
       id-token: write # OIDC token for google-github-actions/auth (target=gke)
+      packages: read # helm registry login ghcr.io for oci://ghcr.io/ charts
     steps:
       # `secrets` is not available in step `if:`, so their presence is checked
       # here as booleans; the secret values themselves never enter this step.
@@ -232,6 +242,18 @@ jobs:
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.3.0
+
+      # Only ghcr.io is covered: it is where isw-kudos/helm-charts publishes,
+      # and GITHUB_TOKEN authenticates there (once the calling repository has
+      # read access on the package). Another registry would need its own
+      # credentials input.
+      - name: Log in to ghcr.io
+        if: startsWith(inputs.chart, 'oci://ghcr.io/')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
 
       # BUILD_NUMBER only forces a pod rollout when its value changes, so it
       # uses run_id (unique per run across the repo) rather than run_number,
