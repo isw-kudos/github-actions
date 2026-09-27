@@ -45,6 +45,15 @@ inputs:
       pull_request_target events.
     required: false
     default: ${{ github.event.pull_request.head.sha }}
+  event-time:
+    description: >-
+      ISO 8601 time of the event that triggered the gate. A completed check
+      run that started before it comes from an earlier event on the same SHA
+      (the gate re-runs on, e.g., a PR title edit), so its result only counts
+      after the grace window, giving the re-run time to register. Defaults to
+      the PR's updated_at from the triggering event; empty turns this off.
+    required: false
+    default: ${{ github.event.pull_request.updated_at }}
   github-token:
     description: Token used to read check-runs. Defaults to the workflow token.
     required: false
