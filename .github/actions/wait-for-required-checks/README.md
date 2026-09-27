@@ -80,6 +80,7 @@ that the gate runs on every PR.
 | `poll-seconds` | no | `15` | Seconds between polls of the Checks API. |
 | `max-wait-seconds` | no | `2400` | Hard ceiling on total wait time. |
 | `head-sha` | no | `${{ github.event.pull_request.head.sha }}` | Commit SHA to read check-runs for. |
+| `event-time` | no | `${{ github.event.pull_request.updated_at }}` | Time of the triggering event. A completed run that started before it is from an earlier event on the same SHA and only counts after grace (see below). Empty turns this off. |
 | `github-token` | no | `${{ github.token }}` | Token used for Checks API calls. Needs `checks: read` (already true for the default `GITHUB_TOKEN`). |
 
 ## Resolution rules
@@ -95,11 +96,23 @@ registers late -- a dynamic-matrix job that cannot exist until its parent
 completes -- re-arms the window instead of being latched not-applicable.
 Nothing is latched: every poll reclassifies every name from the live list.
 
+A gate that re-runs on the same head SHA (for example on `edited`, because a
+listed check re-runs when the PR title changes) finds the earlier event's
+completed runs already there. On its first poll the re-run of a listed check
+may not have registered yet, so the old result would decide the gate: a stale
+green passes a title that the new run will reject, and a stale red fails a
+title the edit fixed. A completed run that started before `event-time` is
+therefore held for the same grace window before its result counts; the re-run
+supersedes it as soon as it registers. A check that does not re-run on the
+event keeps its earlier result once grace elapses -- it is delayed, never
+dropped.
+
 | Latest real check state | Action |
 |---|---|
 | Absent, quiet < `grace-seconds` | keep waiting |
 | Absent, quiet >= `grace-seconds` | treat as not-applicable (success) -- source workflow's `paths:` excluded this PR |
 | `queued` / `in_progress` / `pending` / `waiting` | keep waiting |
+| `completed`, started before `event-time`, quiet < `grace-seconds` | keep waiting -- the run is from an earlier event on this SHA and its re-run may not have registered yet |
 | `completed` + `success` / `skipped` / `neutral` | success |
 | `completed` + `cancelled`, quiet < `grace-seconds` | keep waiting -- a superseding run usually follows a cancellation |
 | `completed` + `cancelled`, quiet >= `grace-seconds` | gate fails, naming the cancelled check |

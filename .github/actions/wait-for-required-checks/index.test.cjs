@@ -157,6 +157,54 @@ run("newestActivityMs re-arms grace: late-registering matrix run is waited for",
   assert.equal(classifyLatest(latestFor(runs, names[1]), quiet, 90).state, "wait");
 });
 
+run("classifyLatest: a run from an earlier event waits out grace, pass or fail", () => {
+  // The first-poll race: the gate re-runs on a title edit (same SHA) and its
+  // first poll sees only the previous event's completed runs, before the
+  // re-run of the title check registers.
+  const edit = Date.parse("2026-01-01T01:00:00Z");
+  for (const conclusion of ["success", "failure", "cancelled"]) {
+    const stale = completed("title", conclusion, "2026-01-01T00:00:00Z");
+    assert.equal(classifyLatest(stale, 10, 90, edit).state, "wait");
+  }
+  assert.equal(
+    classifyLatest(completed("title", "success", "2026-01-01T00:00:00Z"), 90, 90, edit).state,
+    "pass",
+  );
+  assert.equal(
+    classifyLatest(completed("title", "failure", "2026-01-01T00:00:00Z"), 90, 90, edit).state,
+    "fail",
+  );
+});
+
+run("classifyLatest: a run from this event (same second or later) is not held", () => {
+  const edit = Date.parse("2026-01-01T01:00:00Z");
+  assert.equal(
+    classifyLatest(completed("title", "failure", "2026-01-01T01:00:00Z"), 0, 90, edit).state,
+    "fail",
+  );
+  assert.equal(
+    classifyLatest(completed("title", "success", "2026-01-01T01:00:05Z"), 0, 90, edit).state,
+    "pass",
+  );
+});
+
+run("classifyLatest: without an event time nothing is held", () => {
+  const old = completed("title", "success", "2026-01-01T00:00:00Z");
+  assert.equal(classifyLatest(old, 0, 90).state, "pass");
+  assert.equal(classifyLatest(old, 0, 90, 0).state, "pass");
+});
+
+run("latestFor + classifyLatest: the re-run supersedes the held run once registered", () => {
+  const edit = Date.parse("2026-01-01T01:00:00Z");
+  const runs = [
+    completed("title", "success", "2026-01-01T00:00:00Z"),
+    pending("title", "2026-01-01T01:00:01Z"),
+  ];
+  assert.equal(classifyLatest(latestFor(runs, "title"), 10, 90, edit).state, "wait");
+  runs[1] = completed("title", "failure", "2026-01-01T01:00:01Z", "2026-01-01T01:00:20Z");
+  assert.equal(classifyLatest(latestFor(runs, "title"), 10, 90, edit).state, "fail");
+});
+
 run("nextLink parses rel=next and returns null otherwise", () => {
   assert.equal(
     nextLink('<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=5>; rel="last"'),

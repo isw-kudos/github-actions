@@ -69,9 +69,15 @@ function newestActivityMs(runs, names) {
 // grace measures "nothing is happening", not "the gate has been up a while".
 // `cancelled` gets the same grace as absence before failing: a cancellation
 // is usually a superseded batch whose replacement run is about to register,
-// and the replacement (a newer non-skipped run) then takes over. Pure — no
-// I/O — so the resolution rules are directly testable.
-function classifyLatest(run, quietSeconds, graceSeconds) {
+// and the replacement (a newer non-skipped run) then takes over.
+// A completed run that started before eventTimeMs (the event that triggered
+// this gate) belongs to an earlier event on the same SHA — e.g. the gate
+// re-runs on a PR title edit — and its re-run may not have registered yet at
+// the first poll. Its result, pass or fail, gets the same grace before it
+// counts, so the gate neither passes on a stale green nor fails on a stale
+// red that the edit fixed. Pure — no I/O — so the resolution rules are
+// directly testable.
+function classifyLatest(run, quietSeconds, graceSeconds, eventTimeMs = 0) {
   if (!run) {
     return quietSeconds < graceSeconds
       ? { state: "wait", detail: `not yet registered (grace ${graceSeconds}s)` }
@@ -83,6 +89,12 @@ function classifyLatest(run, quietSeconds, graceSeconds) {
   const status = run.status;
   const conclusion = run.conclusion || "";
   if (status === "completed") {
+    if (quietSeconds < graceSeconds && Date.parse(run.started_at) < eventTimeMs) {
+      return {
+        state: "wait",
+        detail: `${conclusion} from an earlier event (grace ${graceSeconds}s for a re-run)`,
+      };
+    }
     if (RESOLVE_PASS.includes(conclusion)) {
       return { state: "pass", detail: conclusion };
     }
@@ -163,6 +175,8 @@ async function main() {
   const pollSeconds = Number(process.env["INPUT_POLL-SECONDS"] || "15");
   const maxWaitSeconds = Number(process.env["INPUT_MAX-WAIT-SECONDS"] || "2400");
   const headSha = (process.env["INPUT_HEAD-SHA"] || "").trim();
+  const eventTime = (process.env["INPUT_EVENT-TIME"] || "").trim();
+  const eventTimeMs = eventTime ? Date.parse(eventTime) : 0;
   const token = process.env["INPUT_GITHUB-TOKEN"] || process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
   const apiUrl = process.env.GITHUB_API_URL || "https://api.github.com";
@@ -182,10 +196,15 @@ async function main() {
     annotateError("Bad configuration", "no github-token available.");
     process.exit(1);
   }
+  if (Number.isNaN(eventTimeMs)) {
+    annotateError("Bad configuration", `event-time is not an ISO 8601 timestamp: ${eventTime}`);
+    process.exit(1);
+  }
 
   console.log(`Required checks (${names.length}):`);
   for (const n of names) console.log(`  - ${n}`);
-  console.log(`Head SHA: ${headSha}\n`);
+  console.log(`Head SHA: ${headSha}`);
+  console.log(`Event time: ${eventTime || "(none; earlier-event runs are not held)"}\n`);
 
   // No per-name latching: every poll reclassifies every name from the live
   // check-run list, so a check that registers late (dynamic matrix), or a
@@ -207,6 +226,7 @@ async function main() {
         latestFor(runs, name),
         quietSeconds,
         graceSeconds,
+        eventTimeMs,
       );
       states.set(name, { state, detail });
 
