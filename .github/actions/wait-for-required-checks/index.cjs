@@ -12,6 +12,9 @@
 
 const RESOLVE_PASS = ["success", "skipped", "neutral"];
 const PENDING_STATES = ["queued", "in_progress", "pending", "waiting"];
+// ISO 8601 with an explicit zone, as GitHub emits it. Date.parse alone also
+// accepts "1" or a zone-less time read as runner-local.
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 
 // GitHub workflow command — surfaces as a job annotation.
 function annotateError(title, message) {
@@ -92,7 +95,7 @@ function classifyLatest(run, quietSeconds, graceSeconds, eventTimeMs = 0) {
     if (quietSeconds < graceSeconds && Date.parse(run.started_at) < eventTimeMs) {
       return {
         state: "wait",
-        detail: `${conclusion} from an earlier event (grace ${graceSeconds}s for a re-run)`,
+        detail: `${conclusion || "completed"} from an earlier event (grace ${graceSeconds}s for a re-run)`,
       };
     }
     if (RESOLVE_PASS.includes(conclusion)) {
@@ -176,7 +179,7 @@ async function main() {
   const maxWaitSeconds = Number(process.env["INPUT_MAX-WAIT-SECONDS"] || "2400");
   const headSha = (process.env["INPUT_HEAD-SHA"] || "").trim();
   const eventTime = (process.env["INPUT_EVENT-TIME"] || "").trim();
-  const eventTimeMs = eventTime ? Date.parse(eventTime) : 0;
+  const eventTimeMs = ISO_TIMESTAMP.test(eventTime) ? Date.parse(eventTime) : 0;
   const token = process.env["INPUT_GITHUB-TOKEN"] || process.env.GITHUB_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
   const apiUrl = process.env.GITHUB_API_URL || "https://api.github.com";
@@ -196,8 +199,8 @@ async function main() {
     annotateError("Bad configuration", "no github-token available.");
     process.exit(1);
   }
-  if (Number.isNaN(eventTimeMs)) {
-    annotateError("Bad configuration", `event-time is not an ISO 8601 timestamp: ${eventTime}`);
+  if (eventTime && !eventTimeMs) {
+    annotateError("Bad configuration", `event-time is not an ISO 8601 timestamp with a zone: ${eventTime}`);
     process.exit(1);
   }
 

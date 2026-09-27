@@ -205,6 +205,24 @@ run("latestFor + classifyLatest: the re-run supersedes the held run once registe
   assert.equal(classifyLatest(latestFor(runs, "title"), 10, 90, edit).state, "fail");
 });
 
+run("earlier-event failure + skipped run from this event: held, then still fails", () => {
+  // The laundering case: the edit's run of the check skips, so latestFor keeps
+  // the earlier failure. Holding it must only delay the failure.
+  const edit = Date.parse("2026-01-01T01:00:00Z");
+  const runs = [
+    completed("title", "failure", "2026-01-01T00:00:00Z"),
+    completed("title", "skipped", "2026-01-01T01:00:02Z"),
+  ];
+  assert.equal(classifyLatest(latestFor(runs, "title"), 10, 90, edit).state, "wait");
+  assert.equal(classifyLatest(latestFor(runs, "title"), 90, 90, edit).state, "fail");
+});
+
+run("earlier-event cancelled run with no replacement fails after grace", () => {
+  const edit = Date.parse("2026-01-01T01:00:00Z");
+  const stale = completed("lint", "cancelled", "2026-01-01T00:00:00Z");
+  assert.equal(classifyLatest(stale, 90, 90, edit).state, "fail");
+});
+
 run("nextLink parses rel=next and returns null otherwise", () => {
   assert.equal(
     nextLink('<https://api.github.com/x?page=2>; rel="next", <https://api.github.com/x?page=5>; rel="last"'),
