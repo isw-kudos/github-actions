@@ -52,7 +52,7 @@ while IFS= read -r f; do
   esac
 done <<< "$staged"
 
-# Deduplicate
+# Deduplicate. sed, not grep -v: grep exits 1 when no component matched, which aborts under pipefail.
 required_scopes=$(echo "$required_scopes" | tr ' ' '\n' | sort -u | sed '/^$/d' | tr '\n' ' ' | xargs)
 [ -z "$required_scopes" ] && exit 0
 
