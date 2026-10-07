@@ -23,6 +23,8 @@ required_scopes=""
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   case "$f" in
+    .github/actions/anthropic-oidc-token/*)
+      required_scopes="$required_scopes anthropic-oidc-token" ;;
     .github/workflows/claude-code-review.yml)
       required_scopes="$required_scopes claude-code-review" ;;
     .github/workflows/cleanup-images-ghcr.yml)

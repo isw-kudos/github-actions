@@ -24,6 +24,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
 | cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 | detect-image-changes | `detect-image-changes-v` | `.github/actions/detect-image-changes/**` | boards, collab, huddo-services (the `changes` job in each Images workflow) |
+| anthropic-oidc-token | `anthropic-oidc-token-v` | `.github/actions/anthropic-oidc-token/**` | jobs that run Claude Code with a federated Anthropic token |
 
 ## Version bump rules
 
@@ -76,6 +77,7 @@ Mapping currently in `renovate.json`:
 | `.github/workflows/retag-images-ghcr.yml` | `chore(retag-images-ghcr): ...` | retag-images-ghcr (patch) |
 | `.github/workflows/cleanup-images-ghcr.yml` | `chore(cleanup-images-ghcr): ...` | cleanup-images-ghcr (patch) |
 | `.github/actions/detect-image-changes/**` | `chore(detect-image-changes): ...` | detect-image-changes (patch) |
+| `.github/actions/anthropic-oidc-token/**` | `chore(anthropic-oidc-token): ...` | anthropic-oidc-token (patch) |
 | Anything else | `chore(deps): ... (github-actions)` | No component release (catch-all, but no `paths:` match) |
 
 Other Renovate behaviours that affect release cadence:
@@ -222,6 +224,7 @@ pre-commit install --hook-type commit-msg
 | `.github/workflows/retag-images-ghcr.yml` | `retag-images-ghcr` | `chore(retag-images-ghcr): ...` |
 | `.github/workflows/cleanup-images-ghcr.yml` | `cleanup-images-ghcr` | `chore(cleanup-images-ghcr): ...` |
 | `.github/actions/detect-image-changes/**` | `detect-image-changes` | `chore(detect-image-changes): ...` |
+| `.github/actions/anthropic-oidc-token/**` | `anthropic-oidc-token` | `chore(anthropic-oidc-token): ...` |
 | Other files | Default (`deps`) | `chore(deps): ...` |
 
 ## Adding a new component
