@@ -24,7 +24,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
 | cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 | detect-image-changes | `detect-image-changes-v` | `.github/actions/detect-image-changes/**` | boards, collab, huddo-services (the `changes` job in each Images workflow) |
-| anthropic-oidc-token | `anthropic-oidc-token-v` | `.github/actions/anthropic-oidc-token/**` | jobs that run Claude Code with a federated Anthropic token |
+| anthropic-oidc-token | `anthropic-oidc-token-v` | `.github/actions/anthropic-oidc-token/**` | claude-code-review (via `$/`), jobs that run Claude Code with a federated Anthropic token |
 
 ## Version bump rules
 
@@ -245,3 +245,7 @@ pre-commit install --hook-type commit-msg
 ### ecs-deploy runtime behaviour
 
 `ecs-deploy.yml` checks out this repo from `ref: main` at runtime to access the `ecs-query` action. The version tag only controls the workflow YAML -- the `ecs-query` action code is always pulled from latest `main`.
+
+### claude-code-review and anthropic-oidc-token
+
+`claude-code-review.yml` loads the `anthropic-oidc-token` action through the `$/` self-repository ref, so each `claude-code-review` release runs the action as it was at that release's commit. A change scoped only to `anthropic-oidc-token` releases that component but not `claude-code-review`. To ship it to `claude-code-review` callers, follow it with a `fix(claude-code-review)` commit.
