@@ -1,0 +1,103 @@
+name: Anthropic OIDC token
+description: >-
+  Exchange the job's GitHub OIDC token for a short-lived Anthropic access
+  token through a Workload Identity Federation rule, so no long-lived
+  Anthropic credential is stored in the repository. The calling job needs
+  `id-token: write`. See README.md.
+
+inputs:
+  organization-id:
+    description: Anthropic organization ID that owns the service account.
+    required: true
+  workspace-id:
+    description: Anthropic workspace ID the access token is scoped to.
+    required: true
+  service-account-id:
+    description: Anthropic service account the token is issued for.
+    required: true
+  federation-rule-id:
+    description: >-
+      Federation rule that trusts this repository's GitHub OIDC token for the
+      service account.
+    required: true
+
+outputs:
+  access-token:
+    description: >-
+      Anthropic access token, masked in the job log. Pass it to
+      anthropics/claude-code-action as `claude_code_oauth_token`, or to the
+      Claude Code CLI as `CLAUDE_CODE_OAUTH_TOKEN`.
+    value: ${{ steps.exchange.outputs.access-token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Exchange GitHub OIDC token for Anthropic access token
+      id: exchange
+      shell: bash
+      env:
+        ORGANIZATION_ID: ${{ inputs.organization-id }}
+        WORKSPACE_ID: ${{ inputs.workspace-id }}
+        SERVICE_ACCOUNT_ID: ${{ inputs.service-account-id }}
+        FEDERATION_RULE_ID: ${{ inputs.federation-rule-id }}
+      run: |
+        set -euo pipefail
+        # The runner does not enforce `required: true` on action inputs, and
+        # an unset repository variable arrives as "". Name the missing input
+        # here instead of failing later with an opaque 400 from the endpoint.
+        missing=""
+        for pair in organization-id:ORGANIZATION_ID workspace-id:WORKSPACE_ID \
+                    service-account-id:SERVICE_ACCOUNT_ID federation-rule-id:FEDERATION_RULE_ID; do
+          var="${pair#*:}"
+          if [ -z "${!var:-}" ]; then
+            missing="$missing ${pair%%:*}"
+          fi
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::Missing input(s):$missing"
+          exit 1
+        fi
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::error::No GitHub OIDC token endpoint: grant the calling job 'id-token: write'"
+          exit 1
+        fi
+
+        jwt=$(curl -fsS --retry 3 \
+          -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+          | jq -r '.value // empty')
+        if [ -z "$jwt" ]; then
+          echo "::error::GitHub returned no OIDC token"
+          exit 1
+        fi
+        # The JWT is itself exchangeable for the Anthropic token while it lives.
+        echo "::add-mask::$jwt"
+
+        body=$(jq -n \
+          --arg jwt "$jwt" \
+          --arg frid "$FEDERATION_RULE_ID" \
+          --arg oid "$ORGANIZATION_ID" \
+          --arg sid "$SERVICE_ACCOUNT_ID" \
+          --arg wid "$WORKSPACE_ID" \
+          '{grant_type:"urn:ietf:params:oauth:grant-type:jwt-bearer",assertion:$jwt,federation_rule_id:$frid,organization_id:$oid,service_account_id:$sid,workspace_id:$wid}')
+        # Not retried: the assertion may be single-use.
+        response=$(curl -sS -w "\n%{http_code}" -X POST https://api.anthropic.com/v1/oauth/token \
+          -H "content-type: application/json" \
+          -d "$body")
+        http_code=$(echo "$response" | tail -n1)
+        response_body=$(echo "$response" | sed '$d')
+        if [ "$http_code" != "200" ]; then
+          # Compact to one line: a multi-line body would escape the annotation
+          # and its later lines would be parsed as workflow commands.
+          error_body=$(jq -c . <<<"$response_body" 2>/dev/null || echo "<non-JSON body>")
+          echo "::error::Token exchange failed (HTTP $http_code): $error_body"
+          exit 1
+        fi
+        access_token=$(echo "$response_body" | jq -r '.access_token // empty')
+        # A 200 body is a credential response: never log it.
+        if [ -z "$access_token" ]; then
+          echo "::error::Token exchange returned no access_token"
+          exit 1
+        fi
+        echo "::add-mask::$access_token"
+        echo "access-token=$access_token" >> "$GITHUB_OUTPUT"

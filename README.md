@@ -242,3 +242,20 @@ steps:
       images: |
         {"api": {"dockerfile_path": "apps/api/Dockerfile", "image": "api"}}
 ```
+
+#### anthropic-oidc-token
+Composite action. Exchanges the job's GitHub OIDC token for a short-lived Anthropic access token through an Anthropic Workload Identity Federation rule, so the repository keeps only non-secret IDs (as variables) and no long-lived Anthropic credential. The token is masked and returned as the `access-token` output, for `anthropics/claude-code-action` (`claude_code_oauth_token`) or the Claude Code CLI (`CLAUDE_CODE_OAUTH_TOKEN`). Grant `id-token: write` on the calling job. See the [action README](.github/actions/anthropic-oidc-token/README.md).
+
+```yaml
+steps:
+  - id: anthropic-auth
+    uses: isw-kudos/github-actions/.github/actions/anthropic-oidc-token@<dummy hash>
+    with:
+      organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+      service-account-id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      federation-rule-id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+  - uses: anthropics/claude-code-action@<dummy hash>
+    with:
+      claude_code_oauth_token: ${{ steps.anthropic-auth.outputs.access-token }}
+```
