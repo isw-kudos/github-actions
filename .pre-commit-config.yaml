@@ -50,4 +50,3 @@ repos:
         language: script
         entry: .github/scripts/check-component-scope.sh
         stages: [commit-msg]
-        pass_filenames: false
