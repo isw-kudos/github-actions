@@ -151,7 +151,7 @@ jobs:
             fi
           done
           # A glob, so `*`, `?` and `[...]` on top of the tag characters.
-          glob_re='^[A-Za-z0-9_.*?\[\]-]*$'
+          glob_re='^[]A-Za-z0-9_.*?[-]*$'
           if [[ ! "$COMPARE_TAGS" =~ $glob_re ]]; then
             echo "::error::compare_tags '$COMPARE_TAGS' is not a tag glob"
             fail=1
