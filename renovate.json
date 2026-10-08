@@ -157,6 +157,13 @@
       "commitMessageSuffix": ""
     },
     {
+      "description": "Scope copy-images-ghcr workflow dependency updates",
+      "matchFileNames": [".github/workflows/copy-images-ghcr.yml"],
+      "semanticCommitType": "chore",
+      "semanticCommitScope": "copy-images-ghcr",
+      "commitMessageSuffix": ""
+    },
+    {
       "description": "Scope cleanup-images-ghcr workflow dependency updates",
       "matchFileNames": [".github/workflows/cleanup-images-ghcr.yml"],
       "semanticCommitType": "chore",

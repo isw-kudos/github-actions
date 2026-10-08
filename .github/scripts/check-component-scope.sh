@@ -29,6 +29,8 @@ while IFS= read -r f; do
       required_scopes="$required_scopes claude-code-review" ;;
     .github/workflows/cleanup-images-ghcr.yml)
       required_scopes="$required_scopes cleanup-images-ghcr" ;;
+    .github/workflows/copy-images-ghcr.yml)
+      required_scopes="$required_scopes copy-images-ghcr" ;;
     .github/actions/detect-image-changes/*)
       required_scopes="$required_scopes detect-image-changes" ;;
     .github/workflows/determine-image-digest.yml)
