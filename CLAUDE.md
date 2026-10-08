@@ -63,6 +63,7 @@ Each externally consumed component is independently versioned with a semver tag 
 | `claude-code-review` | `claude-code-review-v` |
 | `turbo-repo-cache` | `turbo-repo-cache-v` |
 | `retag-images-ghcr` | `retag-images-ghcr-v` |
+| `copy-images-ghcr` | `copy-images-ghcr-v` |
 | `cleanup-images-ghcr` | `cleanup-images-ghcr-v` |
 | `detect-image-changes` | `detect-image-changes-v` |
 | `anthropic-oidc-token` | `anthropic-oidc-token-v` |
@@ -79,6 +80,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster; chart from `oci://ghcr.io/isw-kudos/charts` (logs in with `GITHUB_TOKEN`) or the config repo, values from the config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, OCI index and digest preserved, every source resolved before any tag moves and written by that digest |
+| `copy-images-ghcr.yml` | Copy one tag of a list of ghcr.io images to another registry with `crane copy`, optionally renamed (`huddo-wikis=wikis`), by digest after resolving every source, with a job summary that compares each image against the newest existing tag on the target |
 | `cleanup-images-ghcr.yml` | Delete stale versions of a list of ghcr.io packages (untagged by default, tag patterns on request) with `dataaxiom/ghcr-cleanup-action`, which keeps the untagged children every tagged OCI index references; dry run unless told otherwise |
 | `pre-commit.yml` | Standard pre-commit checks (whitespace, YAML, secret scanning via gitleaks) |
 | `tofu-pre-commit.yml` | IaC pre-commit with OpenTofu, Terraform Docs, and Trivy vulnerability scanning |

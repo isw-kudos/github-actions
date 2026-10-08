@@ -175,6 +175,30 @@ jobs:
         user
 ```
 
+#### copy-images-ghcr
+Copies `source_tag` of every listed `ghcr.io/<owner>/<image>` to `<target_registry>/<target_namespace>/<image>:<target_tag>` with `crane copy`, the cross-registry sibling of `retag-images-ghcr`: the manifest is transferred as is (an OCI index keeps its digest) and only blobs the target lacks are uploaded. An entry `source=target` renames the image on the way (`huddo-wikis=wikis`). Every source digest is resolved before anything is written, so a missing image fails the run with nothing copied, and each copy is then made by that digest in parallel. A target tag already at the source digest is `unchanged` and skipped; with `no_clobber`, a target tag at any other digest is `kept`. The job summary lists each image's digest and what the target tag held before, or, for a tag new to the target (a dated release), the newest existing tag matching `compare_tags` and whether it already carried the same digest (`updated, same as 2026-09-30`). Reads ghcr.io with the calling repo's `GITHUB_TOKEN` (grant exactly `packages: read`) and writes the target with the two secrets, which need push access to every target repository; a registry that does not create repositories on first push needs them created beforehand.
+
+```yaml
+jobs:
+  release:
+    permissions:
+      packages: read
+    uses: isw-kudos/github-actions/.github/workflows/copy-images-ghcr.yml@<dummy hash>
+    with:
+      source_tag: main
+      target_registry: quay.io
+      target_namespace: huddo
+      target_tag: 2026-10-08
+      compare_tags: '20??-??-??'
+      images: |
+        huddo-core=core
+        huddo-wikis=wikis
+        user
+    secrets:
+      target_username: ${{ secrets.QUAY_USERNAME }}
+      target_password: ${{ secrets.QUAY_PASSWORD }}
+```
+
 #### cleanup-images-ghcr
 Deletes stale versions of the listed `ghcr.io/<owner>/<package>` packages with `dataaxiom/ghcr-cleanup-action`. By default only untagged versions not updated for `older_than` (7 days; a retag counts as an update) are deleted; the action walks every tagged OCI index first and keeps its untagged children (platform manifests, provenance attestations), which `actions/delete-package-versions` would delete. `delete_tags` adds wildcard tag patterns (a version that also carries a tag outside the pattern only loses the matched tag). `dry_run` defaults to `true`: read a dry-run log before a caller sets it to `false`. The example below is the pre-approval shape (scheduled runs log only, a manual dispatch honours the checkbox); once the log has been reviewed, switch the expression to `github.event_name == 'workflow_dispatch' && inputs.dry_run` so the schedule deletes and the dispatch still has a dry-run switch. Authenticates with the calling repo's `GITHUB_TOKEN`, so that repo needs the Admin role on every package listed (Package settings -> Manage Actions access; the repo that first published a package normally has it, but a dry run never exercises it). Grant exactly `packages: write` on the calling job.
 

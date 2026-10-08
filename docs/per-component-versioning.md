@@ -22,6 +22,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
 | turbo-repo-cache | `turbo-repo-cache-v` | `.github/actions/turbo-repo-cache/**` | huddo (Turborepo monorepo CI) |
 | retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
+| copy-images-ghcr | `copy-images-ghcr-v` | `.github/workflows/copy-images-ghcr.yml` | collab (the customer release to quay.io) |
 | cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 | detect-image-changes | `detect-image-changes-v` | `.github/actions/detect-image-changes/**` | boards, collab, huddo-services (the `changes` job in each Images workflow) |
 | anthropic-oidc-token | `anthropic-oidc-token-v` | `.github/actions/anthropic-oidc-token/**` | claude-code-review (via `$/`), jobs that run Claude Code with a federated Anthropic token |
@@ -75,6 +76,7 @@ Mapping currently in `renovate.json`:
 | `.github/workflows/claude-code-review.yml` | `chore(claude-code-review): ...` | claude-code-review (patch) |
 | `.github/actions/turbo-repo-cache/**` | `chore(turbo-repo-cache): ...` | turbo-repo-cache (patch) |
 | `.github/workflows/retag-images-ghcr.yml` | `chore(retag-images-ghcr): ...` | retag-images-ghcr (patch) |
+| `.github/workflows/copy-images-ghcr.yml` | `chore(copy-images-ghcr): ...` | copy-images-ghcr (patch) |
 | `.github/workflows/cleanup-images-ghcr.yml` | `chore(cleanup-images-ghcr): ...` | cleanup-images-ghcr (patch) |
 | `.github/actions/detect-image-changes/**` | `chore(detect-image-changes): ...` | detect-image-changes (patch) |
 | `.github/actions/anthropic-oidc-token/**` | `chore(anthropic-oidc-token): ...` | anthropic-oidc-token (patch) |
