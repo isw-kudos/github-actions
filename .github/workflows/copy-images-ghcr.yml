@@ -16,10 +16,14 @@ name: Copy Images (ghcr.io -> another registry)
 # instead of taking the job timeout down with the summary unwritten. The job
 # summary records each image's source digest and what the target tag pointed
 # at before, or, for a tag new to the target (a dated release tag), the newest
-# existing tag there and whether it already carried the same digest, so a
-# release that changed nothing for an image says so. An image whose target
-# tag already carries the source digest is reported `unchanged` and not
-# copied again, so a re-run is idempotent.
+# existing tag matching `compare_tags` and whether it already carried the same
+# digest, so a release that changed nothing for an image says so. An image
+# whose target tag already carries the source digest is reported `unchanged`
+# and not copied again, so a re-run is idempotent, and with `no_clobber` a
+# target tag at any other digest is `kept`. Both decisions come from the
+# preflight read, not from crane's own `--no-clobber`, whose HEAD of the target
+# fails on a registry that answers 401 for a repository that does not exist
+# yet (quay.io), which would make every first copy of a new image fail.
 #
 # Reads ghcr.io with the calling repository's GITHUB_TOKEN (the calling job
 # grants `packages: read`) and writes the target registry with the credentials
@@ -57,10 +61,12 @@ on:
         description: >-
           Glob for the target tags to compare a new target tag against; the
           newest match by version sort, other than target_tag, is reported
-          (e.g. `20??-??-??` for dated release tags). Blank disables it.
+          (e.g. `20??-??-??` for dated release tags). Keep it narrow: `*`
+          would rank `latest` or `main` above a dated tag. Blank, the
+          default, disables the comparison.
         required: false
         type: string
-        default: '*'
+        default: ''
       no_clobber:
         description: >-
           Leave a target tag that already exists with a different digest as it
@@ -103,31 +109,11 @@ jobs:
       CRANE_READ_TIMEOUT: 120
       CRANE_COPY_TIMEOUT: 900
     steps:
-      - name: Install crane
-        uses: iarekylew00t/crane-installer@8efb0e525fa83ad39276d294d67dda1cc85733d9 # v4.0.15
-        with:
-          # renovate: datasource=github-releases depName=google/go-containerregistry
-          crane-release: v0.22.1
-
-      - name: Login to ghcr.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to the target registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ inputs.target_registry }}
-          username: ${{ secrets.target_username }}
-          password: ${{ secrets.target_password }}
-
-      - name: Check sources
+      - name: Check inputs
         # Inputs arrive as env vars, never expanded inside the script; they
-        # are also allowlisted here so a typo surfaces as a clear error rather
-        # than a registry 4xx, and so nothing but a valid OCI name/tag ever
-        # reaches crane.
+        # are also allowlisted here, before anything logs in or reaches crane,
+        # so a typo surfaces as a clear error rather than a registry 4xx or a
+        # login failure.
         env:
           IMAGES: ${{ inputs.images }}
           SOURCE_TAG: ${{ inputs.source_tag }}
@@ -137,8 +123,6 @@ jobs:
           COMPARE_TAGS: ${{ inputs.compare_tags }}
         run: |
           set -euo pipefail
-          # ghcr.io namespaces are lowercase even when the GitHub owner is not
-          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
           STATE="$RUNNER_TEMP/copy"
           mkdir -p "$STATE"
 
@@ -150,7 +134,9 @@ jobs:
               fail=1
             fi
           done
-          # A glob, so `*`, `?` and `[...]` on top of the tag characters.
+          # A glob, so `*`, `?` and `[...]` on top of the tag characters. In a
+          # bracket expression `]` must come first and `-` last to be literal;
+          # a backslash is not an escape there.
           glob_re='^[]A-Za-z0-9_.*?[-]*$'
           if [[ ! "$COMPARE_TAGS" =~ $glob_re ]]; then
             echo "::error::compare_tags '$COMPARE_TAGS' is not a tag glob"
@@ -205,16 +191,51 @@ jobs:
           printf '%s\n' "${sources[@]}" > "$STATE/sources"
           printf '%s\n' "${targets[@]}" > "$STATE/targets"
 
+      - name: Install crane
+        uses: iarekylew00t/crane-installer@8efb0e525fa83ad39276d294d67dda1cc85733d9 # v4.0.15
+        with:
+          # renovate: datasource=github-releases depName=google/go-containerregistry
+          crane-release: v0.22.1
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to the target registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ inputs.target_registry }}
+          username: ${{ secrets.target_username }}
+          password: ${{ secrets.target_password }}
+
+      - name: Check sources
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag }}
+          TARGET_REGISTRY: ${{ inputs.target_registry }}
+          TARGET_NAMESPACE: ${{ inputs.target_namespace }}
+          TARGET_TAG: ${{ inputs.target_tag }}
+          COMPARE_TAGS: ${{ inputs.compare_tags }}
+        run: |
+          set -euo pipefail
+          # ghcr.io namespaces are lowercase even when the GitHub owner is not
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          STATE="$RUNNER_TEMP/copy"
+          mapfile -t sources < "$STATE/sources"
+          mapfile -t targets < "$STATE/targets"
+
           # Resolve every source digest, and what the target currently points
           # at, in parallel. A missing source fails the run here, while nothing
-          # has been written. A target tag that does not exist yet is "(none)",
-          # and the newest other tag matching compare_tags (by version sort, so
-          # dated tags order by date) is read instead, as the thing this
-          # release is compared with. A target the credentials cannot read
-          # (quay.io answers 401 for a repository that does not exist yet) is
-          # "(unreadable)" and left for the copy to succeed or fail on, since
-          # the target's previous digest is informational here, not something
-          # to roll back to.
+          # has been written. A target tag that does not exist yet is "(none)";
+          # one the credentials cannot read (quay.io answers 401 for a
+          # repository that does not exist yet; a registry may also answer a
+          # bare 404) is "(unreadable)" and left for the copy to succeed or
+          # fail on, since the target's previous digest is informational here,
+          # not something to roll back to. In both cases the newest other tag
+          # matching compare_tags (by version sort, so dated tags order by
+          # date) is read instead, as the thing this release is compared with.
           resolve() {
             local i=$1 source="ghcr.io/$OWNER/$2" target="$TARGET_REGISTRY/$TARGET_NAMESPACE/$3"
             timeout "$CRANE_READ_TIMEOUT" crane digest "$source:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err" || return 1
@@ -230,7 +251,7 @@ jobs:
             fi
             echo "$TARGET_TAG" > "$STATE/$i.previous_tag"
             cp "$STATE/$i.target" "$STATE/$i.previous"
-            [[ "$(<"$STATE/$i.target")" == "(none)" && -n "$COMPARE_TAGS" ]] || return 0
+            [[ "$(<"$STATE/$i.target")" != sha256:* && -n "$COMPARE_TAGS" ]] || return 0
             local tag previous=""
             while read -r tag; do
               # shellcheck disable=SC2053 # compare_tags is a glob; unquoted so it matches as one
@@ -282,11 +303,9 @@ jobs:
           # Copy by the digest the preflight resolved, not by the source tag,
           # so the summary describes exactly what was published even if the
           # source tag moved in between. A target already at that digest is
-          # skipped; with no_clobber, so is a target at any other digest.
-          # `--no-clobber` is passed as well for the targets the preflight
-          # could not read.
-          copy_args=()
-          [[ "$NO_CLOBBER" == "true" ]] && copy_args+=(--no-clobber)
+          # skipped; with no_clobber, so is a target at any other digest. A
+          # target the preflight could not read is copied either way (see the
+          # header for why crane's own --no-clobber is not used).
           pids=()
           plan=()
           for i in "${!sources[@]}"; do
@@ -298,7 +317,7 @@ jobs:
               plan[i]=kept
             else
               plan[i]=copy
-              timeout "$CRANE_COPY_TIMEOUT" crane copy "${copy_args[@]}" \
+              timeout "$CRANE_COPY_TIMEOUT" crane copy \
                 "ghcr.io/$OWNER/${sources[$i]}@$source" \
                 "$TARGET_REGISTRY/$TARGET_NAMESPACE/${targets[$i]}:$TARGET_TAG" \
                 > "$STATE/$i.copy.log" 2>&1 &
@@ -324,7 +343,7 @@ jobs:
             # A target tag that did not exist shows the newest comparable tag
             # instead; when that already carried this digest, the release
             # changed nothing for the image, and the result says so.
-            previous_cell="\`$previous_tag\` $(short "$previous")"
+            previous_cell="\`$previous_tag\` \`$(short "$previous")\`"
             same=""
             if [[ "$previous_tag" != "$TARGET_TAG" && "$previous" == "$source" ]]; then
               same=", same as \`$previous_tag\`"

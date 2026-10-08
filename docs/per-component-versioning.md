@@ -22,7 +22,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
 | turbo-repo-cache | `turbo-repo-cache-v` | `.github/actions/turbo-repo-cache/**` | huddo (Turborepo monorepo CI) |
 | retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
-| copy-images-ghcr | `copy-images-ghcr-v` | `.github/workflows/copy-images-ghcr.yml` | collab (the customer release to quay.io) |
+| copy-images-ghcr | `copy-images-ghcr-v` | `.github/workflows/copy-images-ghcr.yml` | collab (cross-registry image publishing) |
 | cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 | detect-image-changes | `detect-image-changes-v` | `.github/actions/detect-image-changes/**` | boards, collab, huddo-services (the `changes` job in each Images workflow) |
 | anthropic-oidc-token | `anthropic-oidc-token-v` | `.github/actions/anthropic-oidc-token/**` | claude-code-review (via `$/`), jobs that run Claude Code with a federated Anthropic token |
