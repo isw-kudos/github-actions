@@ -49,7 +49,7 @@ on:
       chart:
         description: >-
           Chart to deploy: an OCI reference with the version as its tag, e.g.
-          oci://ghcr.io/isw-kudos/charts/<name>:<x.y.z> (the job logs in to
+          oci://ghcr.io/isw-kudos/charts/huddo-boards:2.2.1 (the job logs in to
           ghcr.io with GITHUB_TOKEN), or a path relative to the config checkout
         required: true
         type: string
