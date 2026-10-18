@@ -58,12 +58,6 @@
       "groupName": "python dependencies"
     },
     {
-      "description": "The org :gha chart-pin manager matches the example chart reference in the helm-deploy `chart` input description. It is documentation, not a pin: bumping it only cuts a helm-deploy release for no behaviour change.",
-      "matchFileNames": [".github/workflows/helm-deploy.yml"],
-      "matchPackageNames": ["isw-kudos/helm-charts"],
-      "enabled": false
-    },
-    {
       "description": "actionlint toolchain - one branch for the pre-commit rev (github-tags), the actionlint-py pin in the workflow and Claude hook, and the shellcheck-py pin in the workflow and pre-commit config, so CI, pre-commit and the agent never lint with different versions.",
       "groupName": "actionlint",
       "matchPackageNames": ["actionlint-py", "Mateusz-Grzelinski/actionlint-py", "shellcheck-py"]
