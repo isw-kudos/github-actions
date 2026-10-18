@@ -96,7 +96,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.cache.outputs.cache-hit != 'true'
-        uses: anthropics/claude-code-action@cfc3eb22bfed5c26ef66e3223c982af27e4524de # v1.0.231
+        uses: anthropics/claude-code-action@f27be6b65a4652f08a2ba3cff79114829b588967 # v1.0.252
         with:
           allowed_bots: 'renovate[bot]'
           # Least-privilege tool allowlist — grant only the read/inspection
