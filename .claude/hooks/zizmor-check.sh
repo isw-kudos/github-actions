@@ -17,7 +17,7 @@ esac
 # Pinned CLI version. Renovate bumps this in lockstep with the zizmor.yml
 # `version:` input and the zizmor-action release (the "Zizmor" group in
 # renovate.json), so the hook always audits with the same CLI as CI.
-ZIZMOR_VERSION=1.30.0
+ZIZMOR_VERSION=1.30.1
 
 # Only use a system zizmor if it is the pinned version; otherwise fetch the
 # pin via uvx so a stale local install can't audit with a different CLI.
