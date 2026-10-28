@@ -45,6 +45,12 @@ repos:
         entry: node .github/actions/wait-for-required-checks/index.test.cjs
         files: ^\.github/actions/wait-for-required-checks/
         pass_filenames: false
+      - id: detect-image-changes-tests
+        name: detect-image-changes unit tests
+        language: system
+        entry: node .github/actions/detect-image-changes/derive-filters.test.cjs
+        files: ^\.github/actions/detect-image-changes/
+        pass_filenames: false
       - id: component-scope-check
         name: Check versioned component scope in commit message
         language: script
