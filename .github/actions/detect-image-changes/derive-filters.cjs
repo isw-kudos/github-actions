@@ -25,13 +25,16 @@ class DeriveFiltersError extends Error {
   }
 }
 
-// Filter names become YAML keys and paths-filter output names; keep them to
-// characters that need no quoting in either.
+// Filter names become paths-filter output names, compared as strings with
+// the image keys. They are written as quoted YAML keys, so `1.0` stays
+// "1.0" instead of loading as a number.
 const FILTER_KEY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 // A pnpm package name, optionally scoped. Anything else among the prune
 // arguments (a flag value, a stray shell word) is not a workspace target.
 const PACKAGE_NAME = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
 const SHELL_OPERATORS = new Set(["&&", "||", ";", "|"]);
+// turbo prune flags whose value can follow as a separate word
+const PRUNE_VALUE_FLAGS = new Set(["--out-dir", "--scope"]);
 const AGGREGATE_FIELDS = ["exclude", "paths"];
 
 // Newline-separated input: trimmed, blank and `#` comment lines dropped.
@@ -43,8 +46,22 @@ function parseList(raw) {
 }
 
 // Logical Dockerfile instructions. Docker drops comment and empty lines even
-// inside a backslash continuation, so they never end one.
-function instructions(text) {
+// inside a backslash continuation, so they never end one. A different
+// escape character would make every continuation invisible here.
+function instructions(text, file) {
+  for (const line of text.split(/\r?\n/)) {
+    const directive = /^\s*#\s*([a-z]+)\s*=\s*(.*)$/i.exec(line);
+    if (!directive) break;
+    if (
+      directive[1].toLowerCase() === "escape" &&
+      directive[2].trim() !== "\\"
+    ) {
+      throw new DeriveFiltersError(
+        `unsupported escape directive "${directive[2].trim()}"; only \\ is parsed`,
+        file,
+      );
+    }
+  }
   const result = [];
   let current = "";
   for (const raw of text.split(/\r?\n/)) {
@@ -61,8 +78,9 @@ function instructions(text) {
   return result;
 }
 
-// Targets of every `turbo prune ... --docker` in a RUN instruction. The
-// arguments end at the first shell operator; flags are dropped.
+// Targets of every `turbo prune` in a RUN instruction, with or without
+// --docker. The arguments end at the first shell operator; flags and their
+// values are dropped, except turbo v1's --scope, which names a target.
 function pruneTargets(instruction) {
   if (!/^RUN\s/i.test(instruction)) return [];
   // operators may touch a word (`--docker;`), so space them out first
@@ -74,24 +92,50 @@ function pruneTargets(instruction) {
   for (let i = 0; i < words.length - 1; i++) {
     if (!/(^|\/)turbo(@\S+)?$/.test(words[i]) || words[i + 1] !== "prune")
       continue;
-    const args = [];
-    for (
-      let j = i + 2;
+    const isArgument = (j) =>
       j < words.length && !SHELL_OPERATORS.has(words[j]);
-      j++
-    ) {
-      args.push(words[j]);
+    for (let j = i + 2; isArgument(j); j++) {
+      const word = words[j];
+      const scope = /^--scope=(.+)$/.exec(word);
+      if (PRUNE_VALUE_FLAGS.has(word) && isArgument(j + 1)) {
+        j++;
+        if (word === "--scope") targets.push(words[j]);
+      } else if (scope) {
+        targets.push(scope[1]);
+      } else if (!word.startsWith("-")) {
+        targets.push(word);
+      }
     }
-    if (args.includes("--docker"))
-      targets.push(...args.filter((arg) => !arg.startsWith("-")));
   }
   return targets;
 }
 
-// Build-context sources of a COPY or ADD: every argument before the
-// destination, in shell or JSON form, as a context-relative path. Docker
-// resolves `src`, `./src` and `/src` alike against the context root.
+// A build-context source as a context-relative path, or null for the whole
+// context (`COPY . .`), which prune narrows to the closure. Docker resolves
+// `src`, `./src` and `/src` alike against the context root, and removes
+// shell-form quotes. A variable or a leftover quote would give a pattern
+// that never matches, so it fails the run.
+function contextPath(raw, file) {
+  const source = raw.replace(/^(["'])(.*)\1$/, "$2");
+  if (/["'$]/.test(source)) {
+    throw new DeriveFiltersError(
+      `build-context source ${raw} uses a variable or quoting that cannot be resolved here; spell the path out`,
+      file,
+    );
+  }
+  const relative = path.posix
+    .normalize(source)
+    .replace(/^(\.?\/)+/, "")
+    .replace(/\/+$/, "");
+  if (!relative || relative === ".") return null;
+  return { path: relative, isDirectory: source.endsWith("/") };
+}
+
+// Build-context sources of a COPY or ADD (every argument before the
+// destination, in shell or JSON form) or of a RUN bind mount.
 function contextSources(instruction, file) {
+  const run = /^RUN\s+((?:--\S+\s+)*)/i.exec(instruction);
+  if (run) return bindMountSources(run[1], file);
   const match = /^(COPY|ADD)\s+(.*)$/i.exec(instruction);
   if (!match) return [];
   let rest = match[2];
@@ -123,20 +167,35 @@ function contextSources(instruction, file) {
       /^([a-z][a-z0-9+.-]*:\/\/|git@)/i.test(source)
     )
       continue;
-    const relative = path.posix
-      .normalize(source)
-      .replace(/^(\.?\/)+/, "")
-      .replace(/\/+$/, "");
-    // the whole context (`COPY . .`): prune narrows it to the closure
-    if (!relative || relative === ".") continue;
-    sources.push({ path: relative, isDirectory: source.endsWith("/") });
+    const contextSource = contextPath(source, file);
+    if (contextSource) sources.push(contextSource);
+  }
+  return sources;
+}
+
+// `RUN --mount=...` flags that bind the build context: type defaults to
+// bind, and a mount without from= reads the context (source defaults to it).
+function bindMountSources(flags, file) {
+  const sources = [];
+  for (const flag of flags.trim().split(/\s+/)) {
+    const mount = /^--mount=(.*)$/i.exec(flag);
+    if (!mount) continue;
+    const fields = Object.fromEntries(
+      mount[1].split(",").map((field) => {
+        const [key, ...value] = field.split("=");
+        return [key.toLowerCase(), value.join("=")];
+      }),
+    );
+    if ((fields.type || "bind") !== "bind" || fields.from) continue;
+    const contextSource = contextPath(fields.source ?? fields.src ?? ".", file);
+    if (contextSource) sources.push(contextSource);
   }
   return sources;
 }
 
 function parseDockerfile(text, file) {
   const parsed = { targets: [], sources: [] };
-  for (const instruction of instructions(text)) {
+  for (const instruction of instructions(text, file)) {
     parsed.targets.push(...pruneTargets(instruction));
     parsed.sources.push(...contextSources(instruction, file));
   }
@@ -267,7 +326,7 @@ function renderFilters(sharedPaths, filters) {
       lines.push(`  - ${JSON.stringify(sharedPath)}`);
   }
   for (const [key, paths] of filters) {
-    lines.push(`${key}:`);
+    lines.push(`${JSON.stringify(key)}:`);
     if (sharedPaths.length) lines.push("  - *shared");
     for (const filterPath of [...paths].sort()) {
       // root files a Dockerfile COPYs are usually shared paths already
@@ -279,8 +338,9 @@ function renderFilters(sharedPaths, filters) {
 }
 
 // The paths-filter YAML for validated inputs. `io` supplies the repo:
-// root (absolute), readFile(relativePath), isDirectory(relativePath) and
-// listProjects(target) -> `pnpm ls --parseable` lines.
+// root (absolute), readFile(relativePath), pathKind(relativePath) ->
+// "directory" | "file" | null, and listProjects(target) -> `pnpm ls
+// --parseable` lines.
 function deriveFilters({ images, sharedPaths, aggregates }, io) {
   const closures = new Map();
   const closureOf = (target, file) => {
@@ -310,21 +370,20 @@ function deriveFilters({ images, sharedPaths, aggregates }, io) {
   for (const [key, { dockerfile_path: file }] of Object.entries(images)) {
     const { targets, sources } = parseDockerfile(io.readFile(file), file);
     if (!targets.length) {
-      throw new DeriveFiltersError(
-        "no 'turbo prune <targets> --docker' line",
-        file,
-      );
+      throw new DeriveFiltersError("no 'turbo prune <targets>' line", file);
     }
-    const paths = new Set();
+    // the Dockerfile may live outside every closure, and BuildKit reads a
+    // `<Dockerfile>.dockerignore` beside it
+    const dockerfile = path.posix.normalize(file).replace(/^(\.?\/)+/, "");
+    const paths = new Set([dockerfile, `${dockerfile}.dockerignore`]);
     for (const target of targets) {
       for (const filterPath of closureOf(target, file)) paths.add(filterPath);
     }
     for (const source of sources) {
-      paths.add(
-        source.isDirectory || io.isDirectory(source.path)
-          ? `${source.path}/**`
-          : source.path,
-      );
+      const kind = source.isDirectory ? "directory" : io.pathKind(source.path);
+      if (kind !== "file") paths.add(`${source.path}/**`);
+      // a glob or a missing path keeps both forms: it may name directories
+      if (kind !== "directory") paths.add(source.path);
     }
     filters.set(key, paths);
   }
@@ -402,12 +461,14 @@ function main() {
         );
       }
     },
-    isDirectory: (relative) => {
+    pathKind: (relative) => {
       try {
-        return fs.statSync(path.join(root, relative)).isDirectory();
+        return fs.statSync(path.join(root, relative)).isDirectory()
+          ? "directory"
+          : "file";
       } catch {
         // a glob or a missing path: docker build reports the latter itself
-        return false;
+        return null;
       }
     },
     listProjects: (target) => listProjects(target, root),

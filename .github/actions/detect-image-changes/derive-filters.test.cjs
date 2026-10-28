@@ -19,9 +19,10 @@ const {
 
 const ROOT = "/repo";
 
-// A fake repo: Dockerfile texts, directories, and each target's closure as
-// repo-relative project dirs (made absolute the way pnpm prints them).
-function fakeIo({ dockerfiles, directories = [], closures }) {
+// A fake repo: Dockerfile texts, directories, files, and each target's
+// closure as repo-relative project dirs (made absolute the way pnpm prints
+// them).
+function fakeIo({ dockerfiles, directories = [], files = [], closures }) {
   const calls = [];
   return {
     calls,
@@ -31,7 +32,12 @@ function fakeIo({ dockerfiles, directories = [], closures }) {
         throw new DeriveFiltersError("cannot read Dockerfile: ENOENT", file);
       return dockerfiles[file];
     },
-    isDirectory: (relative) => directories.includes(relative),
+    pathKind: (relative) =>
+      directories.includes(relative)
+        ? "directory"
+        : files.includes(relative)
+          ? "file"
+          : null,
     listProjects: (target) => {
       calls.push(target);
       if (!(target in closures))
@@ -86,8 +92,16 @@ test("prune targets: backslash continuations and comments inside them", () => {
   assert.deepEqual(targets(text), ["app"]);
 });
 
-test("prune targets: a prune without --docker, or outside RUN, is not one", () => {
-  assert.deepEqual(targets("RUN turbo prune web"), []);
+test("prune targets: turbo v1 --scope, and a separate --out-dir value", () => {
+  assert.deepEqual(targets("RUN turbo prune --scope=api --docker"), ["api"]);
+  assert.deepEqual(targets("RUN turbo prune --scope api --docker"), ["api"]);
+  assert.deepEqual(targets("RUN turbo prune web --out-dir out --docker"), [
+    "web",
+  ]);
+});
+
+test("prune targets: a prune without --docker still counts; outside RUN it does not", () => {
+  assert.deepEqual(targets("RUN turbo prune web"), ["web"]);
   assert.deepEqual(targets("# RUN turbo prune web --docker"), []);
   assert.deepEqual(targets('LABEL note="turbo prune web --docker"'), []);
 });
@@ -260,6 +274,7 @@ const REPO = {
       "COPY . .\nRUN npx turbo prune web web-assets --docker\n",
   },
   directories: ["apps/api/prisma"],
+  files: ["packages/db/push-schema.cjs"],
   closures: {
     api: ["apps/api", "packages/db", "packages/utils"],
     web: ["apps/web", "packages/utils"],
@@ -284,21 +299,27 @@ test("deriveFilters: closures, context sources, shared anchor, aggregate", () =>
       "shared: &shared",
       '  - "pnpm-lock.yaml"',
       '  - "huddo-services"',
-      "api:",
+      '"api":',
       "  - *shared",
       '  - "apps/api/**"',
+      '  - "apps/api/Dockerfile"',
+      '  - "apps/api/Dockerfile.dockerignore"',
       '  - "apps/api/prisma/**"',
       '  - "packages/db/**"',
       '  - "packages/db/push-schema.cjs"',
       '  - "packages/utils/**"',
-      "web:",
+      '"web":',
       "  - *shared",
       '  - "apps/web/**"',
+      '  - "apps/web/Dockerfile"',
+      '  - "apps/web/Dockerfile.dockerignore"',
       '  - "apps/web/assets/**"',
       '  - "packages/utils/**"',
-      "smoke:",
+      '"smoke":',
       "  - *shared",
       '  - "apps/api/**"',
+      '  - "apps/api/Dockerfile"',
+      '  - "apps/api/Dockerfile.dockerignore"',
       '  - "apps/api/prisma/**"',
       '  - "docker-compose.smoke.yaml"',
       '  - "packages/db/**"',
@@ -312,7 +333,7 @@ test("deriveFilters: closures, context sources, shared anchor, aggregate", () =>
 test("deriveFilters: no shared paths means no anchor", () => {
   const yaml = deriveFilters(parseInputs({ IMAGES_JSON }), fakeIo(REPO));
   assert.ok(!yaml.includes("shared"));
-  assert.ok(yaml.startsWith('api:\n  - "apps/api/**"\n'));
+  assert.ok(yaml.startsWith('"api":\n  - "apps/api/**"\n'));
 });
 
 test("deriveFilters: each target is listed once across images", () => {
@@ -394,11 +415,123 @@ test("escapeData / escapeProperty follow the workflow-command rules", () => {
 test("deriveFilters: a COPY of a shared path is not repeated under the image", () => {
   const io = fakeIo({
     dockerfiles: { "Dockerfile": "COPY package.json pnpm-lock.yaml ./\nRUN turbo prune api --docker" },
+    files: ["package.json", "pnpm-lock.yaml"],
     closures: { api: ["apps/api"] },
   });
   const yaml = deriveFilters(
     parseInputs({ IMAGES_JSON: '{"api": {"dockerfile_path": "Dockerfile"}}', SHARED_PATHS: "pnpm-lock.yaml" }),
     io,
   );
-  assert.equal(yaml, 'shared: &shared\n  - "pnpm-lock.yaml"\napi:\n  - *shared\n  - "apps/api/**"\n  - "package.json"\n');
+  assert.equal(yaml, 'shared: &shared\n  - "pnpm-lock.yaml"\n"api":\n  - *shared\n  - "Dockerfile"\n  - "Dockerfile.dockerignore"\n  - "apps/api/**"\n  - "package.json"\n');
+});
+
+test("COPY sources: shell-form quotes are removed", () => {
+  assert.deepEqual(sources('COPY "apps/other/prisma" \'./apps/x/\' /p/'), [
+    { path: "apps/other/prisma", isDirectory: false },
+    { path: "apps/x", isDirectory: true },
+  ]);
+});
+
+test("COPY sources: a variable or unresolvable quoting fails with the file", () => {
+  for (const text of [
+    "COPY ${APP_DIR}/prisma ./prisma",
+    "COPY $APP/prisma ./prisma",
+    'COPY "apps/my file" /p/',
+    'COPY ["$APP/prisma", "/p/"]',
+  ]) {
+    assert.throws(
+      () => parseDockerfile(text, "apps/x/Dockerfile"),
+      (err) =>
+        err instanceof DeriveFiltersError && err.file === "apps/x/Dockerfile",
+      text,
+    );
+  }
+});
+
+test("escape directive: a non-backslash escape fails; a later comment does not", () => {
+  assert.throws(
+    () => parseDockerfile("# escape=`\nRUN turbo prune web --docker", "D"),
+    /escape directive/,
+  );
+  assert.deepEqual(
+    targets("# syntax=docker/dockerfile:1\n# escape=\\\nRUN turbo prune web --docker"),
+    ["web"],
+  );
+  assert.deepEqual(
+    targets("FROM node\n# escape=`\nRUN turbo prune web --docker"),
+    ["web"],
+  );
+});
+
+test("RUN bind mounts of the build context are sources", () => {
+  assert.deepEqual(
+    sources(
+      "RUN --mount=type=bind,source=apps/other/config,target=/cfg --mount=type=cache,target=/root/.npm cp -r /cfg /app",
+    ),
+    [{ path: "apps/other/config", isDirectory: false }],
+  );
+  assert.deepEqual(
+    sources("RUN --mount=src=./package.json,target=package.json npm ci").map(
+      (s) => s.path,
+    ),
+    ["package.json"],
+  );
+  assert.deepEqual(
+    sources("RUN --mount=type=bind,from=builder,source=/app,target=/x ls"),
+    [],
+  );
+  // the whole context, like COPY . .
+  assert.deepEqual(sources("RUN --mount=type=bind,target=/ctx ls"), []);
+  assert.deepEqual(sources("RUN npm ci"), []);
+});
+
+test("deriveFilters: a Dockerfile outside every closure is in its filter", () => {
+  const io = fakeIo({
+    dockerfiles: { "./docker/web.Dockerfile": "RUN turbo prune web --docker" },
+    closures: { web: ["apps/web"] },
+  });
+  const yaml = deriveFilters(
+    parseInputs({
+      IMAGES_JSON: '{"web": {"dockerfile_path": "./docker/web.Dockerfile"}}',
+    }),
+    io,
+  );
+  assert.equal(
+    yaml,
+    '"web":\n  - "apps/web/**"\n  - "docker/web.Dockerfile"\n  - "docker/web.Dockerfile.dockerignore"\n',
+  );
+});
+
+test("deriveFilters: a glob or missing source keeps both the path and path/**", () => {
+  const io = fakeIo({
+    dockerfiles: {
+      Dockerfile:
+        "RUN turbo prune api --docker\nCOPY apps/*/prisma apps/gone ./p/",
+    },
+    closures: { api: ["apps/api"] },
+  });
+  const yaml = deriveFilters(
+    parseInputs({ IMAGES_JSON: '{"api": {"dockerfile_path": "Dockerfile"}}' }),
+    io,
+  );
+  for (const filterPath of [
+    "apps/*/prisma",
+    "apps/*/prisma/**",
+    "apps/gone",
+    "apps/gone/**",
+  ]) {
+    assert.ok(yaml.includes(`  - "${filterPath}"\n`), filterPath);
+  }
+});
+
+test("deriveFilters: numeric-looking filter names are quoted keys", () => {
+  const io = fakeIo({
+    dockerfiles: { Dockerfile: "RUN turbo prune api --docker" },
+    closures: { api: ["apps/api"] },
+  });
+  const yaml = deriveFilters(
+    parseInputs({ IMAGES_JSON: '{"1.0": {"dockerfile_path": "Dockerfile"}}' }),
+    io,
+  );
+  assert.ok(yaml.startsWith('"1.0":\n'));
 });

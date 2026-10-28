@@ -98,16 +98,20 @@ A static `packages/**` shared filter rebuilds every image when any package
 changes. With `derive-filters: "true"` the action writes the filters itself
 from what each Dockerfile can put into its image:
 
-- **Prune closures.** Every target of every `turbo prune <targets> --docker`
-  in a `RUN` instruction, with its workspace dependency closure (dev
-  dependencies included, as prune does), from
+- **The Dockerfile itself**, and the `<Dockerfile>.dockerignore` BuildKit
+  reads beside it.
+- **Prune closures.** Every target of every `turbo prune <targets>` in a
+  `RUN` instruction (turbo v1 `--scope` included), with its workspace
+  dependency closure (dev dependencies included, as prune does), from
   `pnpm ls --fail-if-no-match --parseable --depth -1 --filter=<target>...`.
   Each project directory becomes `<dir>/**`.
 - **Build-context sources.** Every source of every `COPY` and `ADD` without
-  `--from`, in shell or JSON form, with or without a leading `./` or `/`.
-  A directory becomes `<dir>/**`, a file or glob stays as written. `COPY . .`
-  (the whole context), heredocs and remote `ADD` sources are skipped. These
-  catch files no closure covers, such as another app's Prisma schema.
+  `--from`, in shell or JSON form, with or without a leading `./` or `/`
+  and with shell quotes removed, and every `RUN --mount=type=bind` without
+  `from=`. A directory becomes `<dir>/**` and a file stays as written; a
+  glob or a missing path gets both forms. `COPY . .` (the whole context),
+  heredocs and remote `ADD` sources are skipped. These catch files no
+  closure covers, such as another app's Prisma schema.
 - **`shared-paths`** become a `shared` filter that every derived filter
   includes through a YAML anchor. A source that is already a shared path is
   not repeated under the image.
@@ -119,7 +123,10 @@ workflow edit. The derived YAML is printed in a collapsed log group.
 
 The run **fails loudly** (never a filter that silently never matches) when:
 
-- a Dockerfile has no `turbo prune ... --docker` line;
+- a Dockerfile has no `turbo prune` line;
+- a build-context source uses a variable (`COPY ${APP}/prisma ...`) or
+  quoting the parser cannot resolve: spell the path out;
+- a Dockerfile sets an `escape` directive other than `\`;
 - a prune target is not a package name, or pnpm finds no workspace project
   for it (pnpm runs once per target, because `--fail-if-no-match` only fails
   when every filter misses);
@@ -130,6 +137,17 @@ The run **fails loudly** (never a filter that silently never matches) when:
 The derive steps (setup-node, corepack, derive) run only when paths-filter
 runs: not on `workflow_dispatch`, and not on a push with no reachable diff
 base. So a registry or corepack outage cannot block a manual rebuild.
+
+Limits:
+
+- **A stage that copied the whole context** (`COPY . .` before
+  `turbo prune`) is assumed to be read only through prune's `out/` and
+  shared root files. A later `COPY --from=<that stage> /app/apps/other/...`
+  reads a path no filter covers; add it to `shared-paths`, or COPY it from
+  the context instead.
+- **Do not derive on `pull_request_target` with a head checkout.** Derive
+  mode runs the pnpm that the checked-out `packageManager` names, under
+  the workflow's token, so it runs code the PR controls.
 
 ### What goes in `shared-paths`
 

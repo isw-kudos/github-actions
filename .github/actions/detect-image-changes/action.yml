@@ -13,7 +13,8 @@ inputs:
       paths-filter YAML. One filter per image key (matching the keys of
       `images`), plus any extra filters the caller wants surfaced in
       `changed_keys` (e.g. a smoke-relevant surface). Required unless
-      `derive-filters` is "true", and not allowed with it.
+      `derive-filters` is "true" (workflow_dispatch, which never reads it,
+      may leave it empty), and not allowed with it.
     required: false
     default: ""
   derive-filters:
@@ -96,10 +97,13 @@ runs:
   using: composite
   steps:
     # Composite actions do not enforce `required`, and an input the chosen
-    # mode ignores would otherwise be dropped without a word.
+    # mode ignores would otherwise be dropped without a word. A missing
+    # `filters` passes on workflow_dispatch, which never reads it: a v1.0.0
+    # caller may compute it in a step that skips on dispatch.
     - name: Check inputs
       shell: bash
       env:
+        EVENT_NAME: ${{ github.event_name }}
         DERIVE: ${{ inputs.derive-filters }}
         FILTERS: ${{ inputs.filters }}
         SHARED_PATHS: ${{ inputs.shared-paths }}
@@ -112,7 +116,7 @@ runs:
             [ -z "$FILTERS" ] || fail "filters is not allowed with derive-filters: true"
             ;;
           false)
-            [ -n "$FILTERS" ] || fail "filters is required unless derive-filters is true"
+            [ -n "$FILTERS" ] || [ "$EVENT_NAME" = workflow_dispatch ] || fail "filters is required unless derive-filters is true"
             [ -z "$SHARED_PATHS$AGGREGATE_FILTERS" ] || fail "shared-paths and aggregate-filters need derive-filters: true"
             ;;
           *) fail "derive-filters must be \"true\" or \"false\"" ;;
