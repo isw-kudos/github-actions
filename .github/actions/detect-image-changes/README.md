@@ -15,11 +15,15 @@ paths-filter-class fixes land once:
    (all-zero, or force-pushed away), the matrix falls back to **building
    everything**: an over-build is recoverable, a red run that built nothing
    is not.
-2. **paths-filter** — pinned by SHA, with `base:` defaulting to the pushed
+2. **Derive filters** (opt-in, `derive-filters: "true"`) — builds each
+   image's filter from its Dockerfile and the pnpm workspace graph, so a
+   change to a package rebuilds only the images that bundle it. See
+   [Deriving filters](#deriving-filters-from-the-workspace-graph).
+3. **paths-filter** — pinned by SHA, with `base:` defaulting to the pushed
    branch on push events (multi-branch push repos would otherwise diff
    against the repo default branch) and empty elsewhere (avoids the
    ignored-input warning on PR runs).
-3. **Matrix assembly** — a jq step builds the include-array from the filter
+4. **Matrix assembly** — a jq step builds the include-array from the filter
    results, or from a `workflow_dispatch` comma-separated key list (empty =
    all). Any unknown dispatch key — even alongside valid ones — **fails the
    run loudly**: silently selecting nothing would give the operator a green
@@ -33,6 +37,10 @@ paths-filter-class fixes land once:
 - The job needs `contents: read` (checkout + push-diff base fetch) and
   `pull-requests: read` (paths-filter lists a PR's changed files).
 - `jq` and `git` on the runner (present on GitHub-hosted runners).
+- With `derive-filters`: a pnpm workspace whose root `package.json` pins
+  pnpm in `packageManager`. The action runs `actions/setup-node` (Node 24)
+  and `corepack enable` itself, so both stay on `PATH` for the caller's
+  later steps in the job.
 
 ## Usage
 
@@ -84,11 +92,118 @@ jobs:
     ...
 ```
 
+## Deriving filters from the workspace graph
+
+A static `packages/**` shared filter rebuilds every image when any package
+changes. With `derive-filters: "true"` the action writes the filters itself
+from what each Dockerfile can put into its image:
+
+- **The Dockerfile itself**, and the `<Dockerfile>.dockerignore` BuildKit
+  reads beside it.
+- **Prune closures.** Every target of every `turbo prune <targets>` in a
+  `RUN` instruction (turbo v1 `--scope` included), with its workspace
+  dependency closure (dev dependencies included, as prune does), from
+  `pnpm ls --fail-if-no-match --parseable --depth -1 --filter=<target>...`.
+  Each project directory becomes `<dir>/**`.
+- **Build-context sources.** Every source of every `COPY` and `ADD` without
+  `--from`, in shell or JSON form, with or without a leading `./` or `/`
+  and with shell quotes removed, and every `RUN --mount=type=bind` without
+  `from=`. A directory becomes `<dir>/**` and a file stays as written; a
+  glob or a missing path gets both forms. `COPY . .` (the whole context),
+  heredocs and remote `ADD` sources are skipped. These catch files no
+  closure covers, such as another app's Prisma schema.
+- **`shared-paths`** become a `shared` filter that every derived filter
+  includes through a YAML anchor. A source that is already a shared path is
+  not repeated under the image.
+- **`aggregate-filters`** add filters such as a boot-smoke surface: the union
+  of every image filter except `exclude`, plus `paths`.
+
+A new prune target, COPY or workspace dependency widens the filter with no
+workflow edit. The derived YAML is printed in a collapsed log group.
+
+The run **fails loudly** (never a filter that silently never matches) when:
+
+- a Dockerfile has no `turbo prune` line;
+- a build-context source uses a variable (`COPY ${APP}/prisma ...`) or
+  quoting the parser cannot resolve: spell the path out;
+- a Dockerfile sets an `escape` directive other than `\`;
+- a prune target is not a package name, or pnpm finds no workspace project
+  for it (pnpm runs once per target, because `--fail-if-no-match` only fails
+  when every filter misses);
+- `pnpm ls` prints a line that is not a project directory inside the repo;
+- `images`, `shared-paths` or `aggregate-filters` is malformed: an unknown
+  `exclude` key, an unknown aggregate field, or a filter name used twice.
+
+The derive steps (setup-node, corepack, derive) run only when paths-filter
+runs: not on `workflow_dispatch`, and not on a push with no reachable diff
+base. So a registry or corepack outage cannot block a manual rebuild.
+
+Limits:
+
+- **A stage that copied the whole context** (`COPY . .` before
+  `turbo prune`) is assumed to be read only through prune's `out/` and
+  shared root files. A later `COPY --from=<that stage> /app/apps/other/...`
+  reads a path no filter covers; add it to `shared-paths`, or COPY it from
+  the context instead.
+- **Do not derive on `pull_request_target` with a head checkout.** Derive
+  mode runs the pnpm that the checked-out `packageManager` names, under
+  the workflow's token, so it runs code the PR controls.
+
+### What goes in `shared-paths`
+
+Paths that every image build reads beyond its own closure:
+
+- `pnpm-lock.yaml` and the root files `turbo prune --docker` copies
+  (`package.json`, `pnpm-workspace.yaml`, `.npmrc`, `turbo.json`), plus
+  `.dockerignore`, which shapes the context prune runs over.
+- The workflow file itself.
+- A submodule's **bare gitlink path** (e.g. `huddo-services`): a pointer
+  bump changes exactly that path, so a glob into the submodule never
+  matches.
+- Workspace edges pnpm cannot see. A workspace member that lives in an
+  unchecked-out submodule has no `package.json` on disk, so its own
+  dependencies are invisible. Add those by hand (e.g.
+  `packages/typescript-config/**` when the submodule's members depend on
+  it).
+
+### Usage
+
+```yaml
+      - name: Detect changed images
+        id: changes
+        uses: isw-kudos/github-actions/.github/actions/detect-image-changes@<sha> # detect-image-changes-vX.Y.Z
+        with:
+          dispatch-images: ${{ inputs.images }}
+          derive-filters: "true"
+          shared-paths: |
+            pnpm-lock.yaml
+            package.json
+            pnpm-workspace.yaml
+            .npmrc
+            turbo.json
+            .dockerignore
+            .github/workflows/images.yml
+            # bare gitlink: a submodule pointer bump changes exactly this path
+            huddo-services
+          aggregate-filters: |
+            {"smoke": {"exclude": ["webfront"], "paths": ["docker-compose.smoke.yaml"]}}
+          images: |
+            {
+              "api": {"dockerfile_path": "apps/api/Dockerfile", "image": "api"},
+              "webfront": {"dockerfile_path": "apps/webfront/Dockerfile", "image": "webfront"}
+            }
+```
+
+The caller needs no Node.js, corepack or derive steps of its own.
+
 ## Inputs
 
 | Input | Required | Default | Purpose |
 |---|---|---|---|
-| `filters` | yes | — | paths-filter YAML; one filter per image key, plus any extra filters (they surface in `changed_keys`) |
+| `filters` | unless `derive-filters` | `""` | paths-filter YAML; one filter per image key, plus any extra filters (they surface in `changed_keys`); not allowed with `derive-filters` |
+| `derive-filters` | no | `"false"` | `"true"` derives the filters from each Dockerfile and the pnpm workspace graph |
+| `shared-paths` | no | `""` | with `derive-filters`: newline list for the `shared` filter every image includes; `#` lines are comments |
+| `aggregate-filters` | no | `""` | with `derive-filters`: JSON `{name: {exclude?: [image keys], paths?: [paths]}}`; each is the union of the included image filters plus `paths` |
 | `images` | yes | — | JSON object: image key → `{dockerfile_path, image, build_args?}`; key order is preserved in the matrix; missing `build_args` becomes `""` |
 | `dispatch-images` | no | `""` | comma-separated keys on `workflow_dispatch`; empty = all; unknown key fails loudly |
 | `token` | no | `github.token` | base fetch + PR file listing |
