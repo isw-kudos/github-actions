@@ -573,3 +573,34 @@ test("parseInputs: a scoped lockfile cannot also be shared, or clash with a key"
     /used twice/,
   );
 });
+
+test("deriveFilters: a scoped lockfile a Dockerfile COPYs stays out of its filter", () => {
+  const io = fakeIo({
+    dockerfiles: {
+      "apps/api/Dockerfile":
+        "COPY package.json pnpm-lock.yaml ./\nRUN npx turbo prune api --docker\n",
+    },
+    files: ["package.json", "pnpm-lock.yaml"],
+    closures: { api: ["apps/api"] },
+  });
+  const images = JSON.stringify({
+    api: { dockerfile_path: "apps/api/Dockerfile" },
+  });
+  const { filters } = deriveFilters(
+    parseInputs({ IMAGES_JSON: images, LOCKFILE: "pnpm-lock.yaml" }),
+    io,
+  );
+  assert.equal(
+    filters,
+    [
+      '"api":',
+      '  - "apps/api/**"',
+      '  - "apps/api/Dockerfile"',
+      '  - "apps/api/Dockerfile.dockerignore"',
+      '  - "package.json"',
+      '"lockfile":',
+      '  - "pnpm-lock.yaml"',
+      "",
+    ].join("\n"),
+  );
+});

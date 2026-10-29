@@ -338,8 +338,11 @@ function renderFilters(sharedPaths, filters, lockfile) {
     lines.push(`${JSON.stringify(key)}:`);
     if (sharedPaths.length) lines.push("  - *shared");
     for (const filterPath of [...paths].sort()) {
-      // root files a Dockerfile COPYs are usually shared paths already
-      if (!sharedPaths.includes(filterPath))
+      // root files a Dockerfile COPYs are usually shared paths already, and
+      // a scoped lockfile reaches an image only through lockfile-scope.cjs
+      const isLockfile =
+        lockfile && (filterPath === lockfile || filterPath === `${lockfile}/**`);
+      if (!sharedPaths.includes(filterPath) && !isLockfile)
         lines.push(`  - ${JSON.stringify(filterPath)}`);
     }
   }
