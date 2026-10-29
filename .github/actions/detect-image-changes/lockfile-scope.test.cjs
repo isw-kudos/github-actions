@@ -311,3 +311,35 @@ test("affectedKeys: a root with no importer is affected, not skipped", () => {
   assert.deepEqual(keys, ["api", "vendored"]);
   assert.match(warnings[0], /^vendored: no importer for vendor\/apps\/api/);
 });
+
+test("parseDocument: explicit `? key` entries, block and inline values", () => {
+  const parsed = parseDocument(
+    [
+      "snapshots:",
+      "  ? 'long@1.0.0(peer@2)'",
+      "  : dependencies:",
+      "      dep: 1.0.0",
+      "    transitivePeerDependencies:",
+      "      - x",
+      "  ? 'empty@1.0.0'",
+      "  : {}",
+      "  ? 'block@1.0.0'",
+      "  :",
+      "    dependencies:",
+      "      dep: 2.0.0",
+      "  plain@1.0.0: {}",
+    ].join("\n"),
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed)), {
+    snapshots: {
+      "long@1.0.0(peer@2)": {
+        dependencies: { dep: "1.0.0" },
+        transitivePeerDependencies: ["x"],
+      },
+      "empty@1.0.0": "{}",
+      "block@1.0.0": { dependencies: { dep: "2.0.0" } },
+      "plain@1.0.0": "{}",
+    },
+  });
+  assert.throws(() => parseDocument("a:\n  : x"), LockfileScopeError);
+});

@@ -71,16 +71,16 @@ function splitKey(text) {
 }
 
 // The block-style YAML subset pnpm writes: nested mappings, `- item`
-// sequences, one-line scalars and flow collections. Anything else throws.
+// sequences, one-line scalars, flow collections, and the explicit
+// `? key` / `: value` form YAML uses for keys over 1024 characters.
+// Anything else throws.
 function parseDocument(text) {
   const root = Object.create(null);
   // each frame: the container its children go into, or a pending key whose
   // container type the first child line decides
   const stack = [{ indent: -1, container: root }];
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim() || line.trimStart().startsWith("#")) continue;
-    const indent = line.length - line.trimStart().length;
-    const body = line.trim();
+
+  const addLine = (indent, body) => {
     while (stack[stack.length - 1].indent >= indent) stack.pop();
     const frame = stack[stack.length - 1];
     const isItem = body === "-" || body.startsWith("- ");
@@ -94,16 +94,49 @@ function parseDocument(text) {
           `sequence item outside a sequence: ${body}`,
         );
       frame.container.push(unquote(body.slice(2).trim()));
-      continue;
+      return;
     }
     if (Array.isArray(frame.container))
       throw new LockfileScopeError(`mapping line inside a sequence: ${body}`);
-    const [key, value] = splitKey(body);
+    const explicitKey = /^\?(?: (.*))?$/.exec(body);
+    const [key, value] = explicitKey
+      ? [unquote((explicitKey[1] || "").trim()), ""]
+      : splitKey(body);
     if (value) {
       frame.container[key] = unquote(value);
     } else {
       frame.container[key] = null;
-      stack.push({ indent, parent: frame.container, key, container: null });
+      stack.push({
+        indent,
+        parent: frame.container,
+        key,
+        container: null,
+        isExplicit: Boolean(explicitKey),
+      });
+    }
+  };
+
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    const indent = line.length - line.trimStart().length;
+    const body = line.trim();
+    const explicitValue = /^:(?: (.*))?$/.exec(body);
+    if (!explicitValue) {
+      addLine(indent, body);
+      continue;
+    }
+    // `: value` belongs to the `? key` just above it, at the same indent
+    const frame = stack[stack.length - 1];
+    if (!frame.isExplicit || frame.indent !== indent || frame.container)
+      throw new LockfileScopeError(`value with no explicit key: ${body}`);
+    const rest = (explicitValue[1] || "").trim();
+    if (!rest) continue;
+    if (/^[{[]/.test(rest) || !/:( |$)/.test(rest)) {
+      frame.parent[frame.key] = unquote(rest);
+      stack.pop();
+    } else {
+      // an inline first entry: its children sit deeper than its own column
+      addLine(indent + body.length - rest.length, rest);
     }
   }
   return root;
