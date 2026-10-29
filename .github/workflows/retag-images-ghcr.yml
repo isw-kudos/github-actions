@@ -15,11 +15,11 @@ name: Retag Images (ghcr.io)
 # exist is skipped and listed as such in the summary instead. The retags then
 # run in parallel, by the digest the preflight resolved (a push to the source
 # tag in between cannot change what is promoted), and every failure is
-# reported, not just the first. Each registry
-# call is bounded so a stalled connection is reported like any other failure
-# instead of taking the job timeout down with the summary unwritten. The job
-# summary records each image's source digest and what the target tag pointed
-# at before, which is the thing to read before deciding whether to roll back.
+# reported, not just the first. Each registry call is bounded so a stalled
+# connection is reported like any other failure instead of taking the job
+# timeout down with the summary unwritten. The job summary records each
+# image's source digest and what the target tag pointed at before, which is
+# the thing to read before deciding whether to roll back.
 #
 # Authenticates to ghcr.io with the calling repository's GITHUB_TOKEN, so the
 # calling repository needs write access to every package in `images` (org
@@ -48,8 +48,10 @@ on:
         description: >-
           Skip an image whose source tag does not exist instead of failing the
           run. For snapshot and restore tags that an image added since the
-          last snapshot has never had. Any other error reading a source still
-          fails the run with nothing moved.
+          last snapshot has never had. ghcr.io answers MANIFEST_UNKNOWN for an
+          image that does not exist at all, so a misspelt image name is
+          skipped too: set it only where another step checks the list. Any
+          other error reading a source still fails the run with nothing moved.
         required: false
         type: boolean
         default: false
@@ -230,9 +232,11 @@ jobs:
             echo "|---|---|---|---|"
           } > "$summary"
           failed=0
+          skipped=0
           for i in "${!images[@]}"; do
             image="${images[$i]}"
             if [[ -e "$STATE/$i.skipped" ]]; then
+              skipped=$((skipped + 1))
               echo "$image: skipped, no $SOURCE_TAG"
               echo "| \`$image\` | (none) | not read | skipped |" >> "$summary"
               continue
@@ -251,7 +255,13 @@ jobs:
             echo "| \`$image\` | \`$(short "$source")\` | \`$(short "$previous")\` | $result |" >> "$summary"
           done
           cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          tagged=$(( ${#images[@]} - skipped ))
           if (( failed > 0 )); then
-            echo "::error::$failed of ${#images[@]} image(s) failed to retag; the job summary shows which tags moved"
+            echo "::error::$failed of $tagged image(s) failed to retag; the job summary shows which tags moved"
             exit 1
+          fi
+          # Green with nothing moved is easy to misread as a restore that
+          # happened, so say so where the run's annotations are read.
+          if (( tagged == 0 )); then
+            echo "::warning::no image has $SOURCE_TAG; nothing was retagged"
           fi
