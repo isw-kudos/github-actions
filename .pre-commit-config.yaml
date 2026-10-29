@@ -48,7 +48,7 @@ repos:
       - id: detect-image-changes-tests
         name: detect-image-changes unit tests
         language: system
-        entry: node .github/actions/detect-image-changes/derive-filters.test.cjs
+        entry: node --test .github/actions/detect-image-changes/derive-filters.test.cjs .github/actions/detect-image-changes/lockfile-scope.test.cjs
         files: ^\.github/actions/detect-image-changes/
         pass_filenames: false
       - id: component-scope-check

@@ -36,6 +36,8 @@ const SHELL_OPERATORS = new Set(["&&", "||", ";", "|"]);
 // turbo prune flags whose value can follow as a separate word
 const PRUNE_VALUE_FLAGS = new Set(["--out-dir", "--scope"]);
 const AGGREGATE_FIELDS = ["exclude", "paths"];
+// the paths-filter name of the scoped lockfile, which no image filter lists
+const LOCKFILE_FILTER = "lockfile";
 
 // Newline-separated input: trimmed, blank and `#` comment lines dropped.
 function parseList(raw) {
@@ -262,6 +264,12 @@ function parseInputs(env) {
   }
 
   const sharedPaths = parseList(env.SHARED_PATHS);
+  const lockfile = (env.LOCKFILE || "").trim();
+  if (lockfile && sharedPaths.includes(lockfile)) {
+    throw new DeriveFiltersError(
+      `${lockfile} is both the scoped lockfile and a shared path; remove it from shared-paths`,
+    );
+  }
 
   const rawAggregates = (env.AGGREGATE_FILTERS || "").trim();
   const aggregates = rawAggregates
@@ -301,6 +309,7 @@ function parseInputs(env) {
 
   const keys = [...Object.keys(images), ...Object.keys(aggregates)];
   if (sharedPaths.length) keys.push("shared");
+  if (lockfile) keys.push(LOCKFILE_FILTER);
   for (const key of keys) {
     if (!FILTER_KEY.test(key)) {
       throw new DeriveFiltersError(
@@ -315,10 +324,10 @@ function parseInputs(env) {
     );
   }
 
-  return { images, sharedPaths, aggregates };
+  return { images, sharedPaths, aggregates, lockfile };
 }
 
-function renderFilters(sharedPaths, filters) {
+function renderFilters(sharedPaths, filters, lockfile) {
   const lines = [];
   if (sharedPaths.length) {
     lines.push("shared: &shared");
@@ -334,14 +343,19 @@ function renderFilters(sharedPaths, filters) {
         lines.push(`  - ${JSON.stringify(filterPath)}`);
     }
   }
+  if (lockfile) {
+    lines.push(`${JSON.stringify(LOCKFILE_FILTER)}:`);
+    lines.push(`  - ${JSON.stringify(lockfile)}`);
+  }
   return `${lines.join("\n")}\n`;
 }
 
-// The paths-filter YAML for validated inputs. `io` supplies the repo:
+// The paths-filter YAML for validated inputs, and each filter's project dirs
+// for lockfile-scope.cjs. `io` supplies the repo:
 // root (absolute), readFile(relativePath), pathKind(relativePath) ->
 // "directory" | "file" | null, and listProjects(target) -> `pnpm ls
 // --parseable` lines.
-function deriveFilters({ images, sharedPaths, aggregates }, io) {
+function deriveFilters({ images, sharedPaths, aggregates, lockfile }, io) {
   const closures = new Map();
   const closureOf = (target, file) => {
     if (!PACKAGE_NAME.test(target)) {
@@ -367,6 +381,7 @@ function deriveFilters({ images, sharedPaths, aggregates }, io) {
   };
 
   const filters = new Map();
+  const roots = {};
   for (const [key, { dockerfile_path: file }] of Object.entries(images)) {
     const { targets, sources } = parseDockerfile(io.readFile(file), file);
     if (!targets.length) {
@@ -376,9 +391,14 @@ function deriveFilters({ images, sharedPaths, aggregates }, io) {
     // `<Dockerfile>.dockerignore` beside it
     const dockerfile = path.posix.normalize(file).replace(/^(\.?\/)+/, "");
     const paths = new Set([dockerfile, `${dockerfile}.dockerignore`]);
+    const projects = new Set();
     for (const target of targets) {
-      for (const filterPath of closureOf(target, file)) paths.add(filterPath);
+      for (const filterPath of closureOf(target, file)) {
+        paths.add(filterPath);
+        projects.add(filterPath.slice(0, -"/**".length));
+      }
     }
+    roots[key] = [...projects].sort();
     for (const source of sources) {
       const kind = source.isDirectory ? "directory" : io.pathKind(source.path);
       if (kind !== "file") paths.add(`${source.path}/**`);
@@ -391,15 +411,18 @@ function deriveFilters({ images, sharedPaths, aggregates }, io) {
   for (const [key, spec] of Object.entries(aggregates)) {
     const exclude = spec.exclude || [];
     const paths = new Set(spec.paths || []);
+    const projects = new Set();
     for (const [image, imagePaths] of filters) {
       if (Object.hasOwn(images, image) && !exclude.includes(image)) {
         for (const filterPath of imagePaths) paths.add(filterPath);
+        for (const project of roots[image]) projects.add(project);
       }
     }
     filters.set(key, paths);
+    roots[key] = [...projects].sort();
   }
 
-  return renderFilters(sharedPaths, filters);
+  return { filters: renderFilters(sharedPaths, filters, lockfile), roots };
 }
 
 // Workflow-command escaping, as @actions/core does it.
@@ -449,7 +472,7 @@ function listProjects(target, root) {
 function main() {
   const root = fs.realpathSync(process.cwd());
   const inputs = parseInputs(process.env);
-  const filters = deriveFilters(inputs, {
+  const { filters, roots } = deriveFilters(inputs, {
     root,
     readFile: (file) => {
       try {
@@ -480,7 +503,7 @@ function main() {
   const delimiter = `ghadelimiter_${randomUUID()}`;
   fs.appendFileSync(
     process.env.GITHUB_OUTPUT,
-    `filters<<${delimiter}\n${filters}${delimiter}\n`,
+    `filters<<${delimiter}\n${filters}${delimiter}\nroots=${JSON.stringify(roots)}\n`,
   );
 }
 
