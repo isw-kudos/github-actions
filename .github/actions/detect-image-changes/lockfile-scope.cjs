@@ -63,7 +63,9 @@ function unquote(raw) {
 function splitKey(text) {
   const quoted = /^('(?:[^']|'')*'|"(?:[^"\\]|\\.)*")(:(?: (.*))?)$/.exec(text);
   if (quoted) return [unquote(quoted[1]), (quoted[3] || "").trim()];
-  const plain = /^([^\s'"][^:]*?):(?: (.*))?$/.exec(text);
+  // a plain key ends at the first `:` before a space or the line end, so
+  // `pkg@https://host/x.tgz:` keeps its URL
+  const plain = /^([^\s'"](?:[^:]|:(?! |$))*?):(?: (.*))?$/.exec(text);
   if (!plain) throw new LockfileScopeError(`not a mapping line: ${text}`);
   return [plain[1], (plain[2] || "").trim()];
 }
@@ -217,12 +219,14 @@ function affectedKeys(baseText, headText, roots, warn) {
   const keys = Object.keys(roots);
   let base;
   let head;
+  if (headText === null || baseText === null) {
+    warn(
+      `no ${headText === null ? "head" : "base"} lockfile to compare; every image is affected`,
+    );
+    return keys;
+  }
   try {
     head = parseLockfile(headText);
-    if (baseText === null) {
-      warn("no base lockfile to compare against; every image is affected");
-      return keys;
-    }
     base = parseLockfile(baseText);
   } catch (err) {
     if (!(err instanceof LockfileScopeError)) throw err;
@@ -231,6 +235,13 @@ function affectedKeys(baseText, headText, roots, warn) {
   }
   return keys.filter((key) => {
     try {
+      // a root the head lockfile lacks (keys relative to another dir, or a
+      // symlinked project) would hide its dependencies on both sides; one
+      // only the base lacks is new, and differs anyway
+      const missing = roots[key].find(
+        (dir) => !Object.hasOwn(head.main.importers, dir),
+      );
+      if (missing) throw new LockfileScopeError(`no importer for ${missing}`);
       return sliceDigest(base, roots[key]) !== sliceDigest(head, roots[key]);
     } catch (err) {
       if (!(err instanceof LockfileScopeError)) throw err;
@@ -255,7 +266,9 @@ function main() {
   const baseText = fs.existsSync(BASE_LOCKFILE)
     ? fs.readFileSync(BASE_LOCKFILE, "utf8")
     : null;
-  const headText = fs.readFileSync(HEAD_LOCKFILE, "utf8");
+  const headText = fs.existsSync(HEAD_LOCKFILE)
+    ? fs.readFileSync(HEAD_LOCKFILE, "utf8")
+    : null;
   const affected = affectedKeys(baseText, headText, roots, (message) =>
     console.log(`::warning title=lockfile-scope::${escapeData(message)}`),
   );

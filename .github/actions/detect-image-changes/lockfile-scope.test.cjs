@@ -275,6 +275,7 @@ test("affectedKeys: no base lockfile affects everything, with a warning", () => 
   const { keys, warnings } = affected(null, lockfile());
   assert.deepEqual(keys, ["api", "web", "smoke"]);
   assert.match(warnings[0], /no base lockfile/);
+  assert.deepEqual(affected(lockfile(), null).keys, ["api", "web", "smoke"]);
 });
 
 test("affectedKeys: an unreadable lockfile affects everything, with a warning", () => {
@@ -288,4 +289,25 @@ test("affectedKeys: an unresolvable reference affects only the image that reache
   const { keys, warnings } = affected(lockfile(), head);
   assert.deepEqual(keys, ["api", "smoke"]);
   assert.match(warnings[0], /^api: no snapshot for lodash@4.17.21/);
+});
+
+test("parseDocument: a plain key may hold a URL's colons", () => {
+  const parsed = parseDocument(
+    "pkg@https://codeload.github.com/a/b/tar.gz/abc:\n  resolution: {tarball: https://x}",
+  );
+  assert.equal(
+    parsed["pkg@https://codeload.github.com/a/b/tar.gz/abc"].resolution,
+    "{tarball: https://x}",
+  );
+});
+
+test("affectedKeys: a root with no importer is affected, not skipped", () => {
+  const roots = { api: ["apps/api"], vendored: ["vendor/apps/api"] };
+  const { keys, warnings } = affected(
+    lockfile(),
+    lockfile({ apiDep: "4.17.22" }),
+    roots,
+  );
+  assert.deepEqual(keys, ["api", "vendored"]);
+  assert.match(warnings[0], /^vendored: no importer for vendor\/apps\/api/);
 });

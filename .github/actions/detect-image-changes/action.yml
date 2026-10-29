@@ -213,7 +213,9 @@ runs:
       if: inputs.scoped-lockfile != '' && steps.filter.outputs.lockfile == 'true'
       shell: bash
       env:
-        BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+        # on push, only when paths-filter also diffed against event.before:
+        # with another `base`, an empty BASE_SHA affects every image
+        BASE_SHA: ${{ github.event_name == 'push' && ((inputs.base == '' || inputs.base == github.ref_name) && github.event.before || '') || github.event.pull_request.base.sha }}
         GIT_TOKEN: ${{ inputs.token }}
         HEAD_LOCKFILE: ${{ inputs.scoped-lockfile }}
         LOCKFILE_ROOTS: ${{ steps.derive.outputs.roots }}
