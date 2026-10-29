@@ -213,14 +213,27 @@ runs:
       if: inputs.scoped-lockfile != '' && steps.filter.outputs.lockfile == 'true'
       shell: bash
       env:
-        # on push, only when paths-filter also diffed against event.before:
-        # with another `base`, an empty BASE_SHA affects every image
-        BASE_SHA: ${{ github.event_name == 'push' && ((inputs.base == '' || inputs.base == github.ref_name) && github.event.before || '') || github.event.pull_request.base.sha }}
+        EVENT_NAME: ${{ github.event_name }}
+        BEFORE_SHA: ${{ github.event.before }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        INPUT_BASE: ${{ inputs.base }}
+        REF_NAME: ${{ github.ref_name }}
         GIT_TOKEN: ${{ inputs.token }}
         HEAD_LOCKFILE: ${{ inputs.scoped-lockfile }}
         LOCKFILE_ROOTS: ${{ steps.derive.outputs.roots }}
       run: |
         set -euo pipefail
+        # On push, only when paths-filter also diffed against event.before.
+        # Compared here, not in an expression: `==` there ignores case, and
+        # paths-filter's branch match does not. An empty BASE_SHA affects
+        # every image.
+        BASE_SHA=$PR_BASE_SHA
+        if [ "$EVENT_NAME" = push ]; then
+          BASE_SHA=""
+          if [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
+            BASE_SHA=$BEFORE_SHA
+          fi
+        fi
         export BASE_LOCKFILE="$RUNNER_TEMP/base-lockfile"
         rm -f "$BASE_LOCKFILE"
         if [ -n "$BASE_SHA" ]; then
