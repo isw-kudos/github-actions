@@ -11,13 +11,15 @@ name: Retag Images (ghcr.io)
 #
 # Every source tag is resolved BEFORE anything is written, so a missing image
 # fails the run with nothing moved instead of leaving the target tag half
-# promoted. The retags then run in parallel, by the digest the preflight
-# resolved (a push to the source tag in between cannot change what is
-# promoted), and every failure is reported, not just the first. Each registry
-# call is bounded so a stalled connection is reported like any other failure
-# instead of taking the job timeout down with the summary unwritten. The job
-# summary records each image's source digest and what the target tag pointed
-# at before, which is the thing to read before deciding whether to roll back.
+# promoted. With `skip_missing_source`, an image whose source tag does not
+# exist is skipped and listed as such in the summary instead. The retags then
+# run in parallel, by the digest the preflight resolved (a push to the source
+# tag in between cannot change what is promoted), and every failure is
+# reported, not just the first. Each registry call is bounded so a stalled
+# connection is reported like any other failure instead of taking the job
+# timeout down with the summary unwritten. The job summary records each
+# image's source digest and what the target tag pointed at before, which is
+# the thing to read before deciding whether to roll back.
 #
 # Authenticates to ghcr.io with the calling repository's GITHUB_TOKEN, so the
 # calling repository needs write access to every package in `images` (org
@@ -42,6 +44,17 @@ on:
         description: Tag to point at the source tag's manifest on every image
         required: true
         type: string
+      skip_missing_source:
+        description: >-
+          Skip an image whose source tag does not exist instead of failing the
+          run. For snapshot and restore tags that an image added since the
+          last snapshot has never had. ghcr.io answers MANIFEST_UNKNOWN for an
+          image that does not exist at all, so a misspelt image name is
+          skipped too: set it only where another step checks the list. Any
+          other error reading a source still fails the run with nothing moved.
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -92,6 +105,7 @@ jobs:
           IMAGES: ${{ inputs.images }}
           SOURCE_TAG: ${{ inputs.source_tag }}
           TARGET_TAG: ${{ inputs.target_tag }}
+          SKIP_MISSING_SOURCE: ${{ inputs.skip_missing_source }}
         run: |
           set -euo pipefail
           # ghcr.io namespaces are lowercase even when the GitHub owner is not
@@ -147,7 +161,11 @@ jobs:
           # recorded as "there was nothing to roll back to".
           resolve() {
             local i=$1 image=$2 ref="ghcr.io/$OWNER/$2"
-            timeout "$CRANE_TIMEOUT" crane digest "$ref:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err" || return 1
+            if ! timeout "$CRANE_TIMEOUT" crane digest "$ref:$SOURCE_TAG" > "$STATE/$i.source" 2> "$STATE/$i.source.err"; then
+              [[ "$SKIP_MISSING_SOURCE" == true ]] && grep -qE 'MANIFEST_UNKNOWN|NAME_UNKNOWN' "$STATE/$i.source.err" || return 1
+              touch "$STATE/$i.skipped"
+              return 0
+            fi
             if ! timeout "$CRANE_TIMEOUT" crane digest "$ref:$TARGET_TAG" > "$STATE/$i.target" 2> "$STATE/$i.target.err"; then
               grep -qE 'MANIFEST_UNKNOWN|NAME_UNKNOWN' "$STATE/$i.target.err" || return 2
               echo "(none)" > "$STATE/$i.target"
@@ -162,7 +180,11 @@ jobs:
           for i in "${!images[@]}"; do
             image="${images[$i]}"
             if wait "${pids[$i]}"; then
-              printf '%-40s %s\n' "$image:$SOURCE_TAG" "$(<"$STATE/$i.source")"
+              if [[ -e "$STATE/$i.skipped" ]]; then
+                echo "::notice::ghcr.io/$OWNER/$image:$SOURCE_TAG does not exist, skipped"
+              else
+                printf '%-40s %s\n' "$image:$SOURCE_TAG" "$(<"$STATE/$i.source")"
+              fi
             else
               if [[ $? -eq 2 ]]; then
                 err=$(tr '\n' ' ' < "$STATE/$i.target.err")
@@ -194,8 +216,9 @@ jobs:
           # tag moved in between.
           pids=()
           for i in "${!images[@]}"; do
+            [[ -e "$STATE/$i.skipped" ]] && continue
             timeout "$CRANE_TIMEOUT" crane tag "ghcr.io/$OWNER/${images[$i]}@$(<"$STATE/$i.source")" "$TARGET_TAG" > "$STATE/$i.tag.log" 2>&1 &
-            pids+=("$!")
+            pids[i]=$!
           done
 
           # 12 hex chars is enough to tell digests apart at a glance; the full
@@ -209,8 +232,15 @@ jobs:
             echo "|---|---|---|---|"
           } > "$summary"
           failed=0
+          skipped=0
           for i in "${!images[@]}"; do
             image="${images[$i]}"
+            if [[ -e "$STATE/$i.skipped" ]]; then
+              skipped=$((skipped + 1))
+              echo "$image: skipped, no $SOURCE_TAG"
+              echo "| \`$image\` | (none) | not read | skipped |" >> "$summary"
+              continue
+            fi
             source=$(<"$STATE/$i.source")
             previous=$(<"$STATE/$i.target")
             if wait "${pids[$i]}"; then
@@ -225,7 +255,13 @@ jobs:
             echo "| \`$image\` | \`$(short "$source")\` | \`$(short "$previous")\` | $result |" >> "$summary"
           done
           cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          tagged=$(( ${#images[@]} - skipped ))
           if (( failed > 0 )); then
-            echo "::error::$failed of ${#images[@]} image(s) failed to retag; the job summary shows which tags moved"
+            echo "::error::$failed of $tagged image(s) failed to retag; the job summary shows which tags moved"
             exit 1
+          fi
+          # Green with nothing moved is easy to misread as a restore that
+          # happened, so say so where the run's annotations are read.
+          if (( tagged == 0 )); then
+            echo "::warning::no image has $SOURCE_TAG; nothing was retagged"
           fi
