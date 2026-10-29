@@ -220,6 +220,10 @@ commit. An image's part is:
 
 An aggregate filter's part is the union of its images' parts.
 
+A Dockerfile that COPYs the lockfile does not put it in that image's path
+filter; only its part decides. A glob COPY source that matches the
+lockfile (e.g. `COPY *.yaml ./`) still does, so name the files instead.
+
 The base is the push's before-commit, or `pull_request.base.sha` on a pull
 request. A pull request's lockfile at its merge commit is compared with its
 base, so the comparison holds the PR's own change. The affected keys are
