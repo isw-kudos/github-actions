@@ -18,7 +18,9 @@ paths-filter-class fixes land once:
 2. **Derive filters** (opt-in, `derive-filters: "true"`) — builds each
    image's filter from its Dockerfile and the pnpm workspace graph, so a
    change to a package rebuilds only the images that bundle it. See
-   [Deriving filters](#deriving-filters-from-the-workspace-graph).
+   [Deriving filters](#deriving-filters-from-the-workspace-graph). With
+   `scoped-lockfile`, a lockfile change also rebuilds only the images whose
+   part of it changed. See [Scoping the lockfile](#scoping-the-lockfile).
 3. **paths-filter** — pinned by SHA, with `base:` defaulting to the pushed
    branch on push events (multi-branch push repos would otherwise diff
    against the repo default branch) and empty elsewhere (avoids the
@@ -153,7 +155,8 @@ Limits:
 
 Paths that every image build reads beyond its own closure:
 
-- `pnpm-lock.yaml` and the root files `turbo prune --docker` copies
+- `pnpm-lock.yaml` (unless it is the `scoped-lockfile`) and the root files
+  `turbo prune --docker` copies
   (`package.json`, `pnpm-workspace.yaml`, `.npmrc`, `turbo.json`), plus
   `.dockerignore`, which shapes the context prune runs over.
 - The workflow file itself.
@@ -175,8 +178,8 @@ Paths that every image build reads beyond its own closure:
         with:
           dispatch-images: ${{ inputs.images }}
           derive-filters: "true"
+          scoped-lockfile: pnpm-lock.yaml
           shared-paths: |
-            pnpm-lock.yaml
             package.json
             pnpm-workspace.yaml
             .npmrc
@@ -196,6 +199,44 @@ Paths that every image build reads beyond its own closure:
 
 The caller needs no Node.js, corepack or derive steps of its own.
 
+## Scoping the lockfile
+
+In `shared-paths`, the lockfile rebuilds every image on any change, such as
+one dependency added to one app. With `scoped-lockfile: pnpm-lock.yaml`
+(and the lockfile left out of `shared-paths`), a change to it rebuilds an
+image only when that image's part of the lockfile differs from the base
+commit. An image's part is:
+
+- the root importer (`.`), which every pruned install keeps;
+- the importer of each project in the image's prune closure, and every
+  importer those reach through `link:` versions. This covers workspace
+  members that paths-filter cannot see, such as a submodule's;
+- the catalog entries those importers use (`catalog:` specifiers);
+- every snapshot their resolved versions reach (dependencies and optional
+  dependencies, aliases and peer suffixes included), with its `packages`
+  entry;
+- every other top-level field (`settings`, `overrides`, and so on) and any
+  document before the last (pnpm's own `packageManagerDependencies`).
+
+An aggregate filter's part is the union of its images' parts.
+
+The base is the push's before-commit, or `pull_request.base.sha` on a pull
+request. A pull request's lockfile at its merge commit is compared with its
+base, so the comparison holds the PR's own change. The affected keys are
+added to `changed_keys` and to the matrix, and the `lockfile` filter name
+also appears in `changed_keys`.
+
+Every image is counted as affected, with a warning, when there is no base
+commit (other events), the base cannot be fetched, the base has no
+lockfile, or a lockfile does not parse. An image whose part has a reference
+that does not resolve is counted as affected on its own. The parser reads
+only the block YAML subset that pnpm writes (lockfile v9, one or more
+documents).
+
+Most lockfile churn moves the root importer (a root dev dependency, or a
+peer that changes the peer suffix of one), and that still rebuilds every
+image. The gain is for changes inside one app or package's dependencies.
+
 ## Inputs
 
 | Input | Required | Default | Purpose |
@@ -203,6 +244,7 @@ The caller needs no Node.js, corepack or derive steps of its own.
 | `filters` | unless `derive-filters` | `""` | paths-filter YAML; one filter per image key, plus any extra filters (they surface in `changed_keys`); not allowed with `derive-filters` |
 | `derive-filters` | no | `"false"` | `"true"` derives the filters from each Dockerfile and the pnpm workspace graph |
 | `shared-paths` | no | `""` | with `derive-filters`: newline list for the `shared` filter every image includes; `#` lines are comments |
+| `scoped-lockfile` | no | `""` | with `derive-filters`: lockfile path to scope per image instead of sharing; see [Scoping the lockfile](#scoping-the-lockfile) |
 | `aggregate-filters` | no | `""` | with `derive-filters`: JSON `{name: {exclude?: [image keys], paths?: [paths]}}`; each is the union of the included image filters plus `paths` |
 | `images` | yes | — | JSON object: image key → `{dockerfile_path, image, build_args?}`; key order is preserved in the matrix; missing `build_args` becomes `""` |
 | `dispatch-images` | no | `""` | comma-separated keys on `workflow_dispatch`; empty = all; unknown key fails loudly |
@@ -215,7 +257,7 @@ The caller needs no Node.js, corepack or derive steps of its own.
 |---|---|
 | `matrix` | include-array JSON: `[{dockerfile_path, image, build_args}, ...]` in `images` key order |
 | `any_images` | `"true"` when the matrix is non-empty |
-| `changed_keys` | JSON array of every matched filter name (image keys and extra filters alike); `[]` on `workflow_dispatch` or when a push has no reachable diff base |
+| `changed_keys` | JSON array of every matched filter name (image keys and extra filters alike), plus the keys a `scoped-lockfile` change affects; `[]` on `workflow_dispatch` or when a push has no reachable diff base |
 
 `changed_keys` exists so callers can derive event-dependent values the matrix
 does not carry — e.g. a boot-smoke job picking `pr-<n>` vs `main` image tags

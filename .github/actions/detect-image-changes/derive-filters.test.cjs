@@ -284,7 +284,7 @@ const REPO = {
 
 test("deriveFilters: closures, context sources, shared anchor, aggregate", () => {
   const io = fakeIo(REPO);
-  const yaml = deriveFilters(
+  const { filters: yaml } = deriveFilters(
     parseInputs({
       IMAGES_JSON,
       SHARED_PATHS: "pnpm-lock.yaml\nhuddo-services",
@@ -331,7 +331,7 @@ test("deriveFilters: closures, context sources, shared anchor, aggregate", () =>
 });
 
 test("deriveFilters: no shared paths means no anchor", () => {
-  const yaml = deriveFilters(parseInputs({ IMAGES_JSON }), fakeIo(REPO));
+  const { filters: yaml } = deriveFilters(parseInputs({ IMAGES_JSON }), fakeIo(REPO));
   assert.ok(!yaml.includes("shared"));
   assert.ok(yaml.startsWith('"api":\n  - "apps/api/**"\n'));
 });
@@ -418,7 +418,7 @@ test("deriveFilters: a COPY of a shared path is not repeated under the image", (
     files: ["package.json", "pnpm-lock.yaml"],
     closures: { api: ["apps/api"] },
   });
-  const yaml = deriveFilters(
+  const { filters: yaml } = deriveFilters(
     parseInputs({ IMAGES_JSON: '{"api": {"dockerfile_path": "Dockerfile"}}', SHARED_PATHS: "pnpm-lock.yaml" }),
     io,
   );
@@ -490,7 +490,7 @@ test("deriveFilters: a Dockerfile outside every closure is in its filter", () =>
     dockerfiles: { "./docker/web.Dockerfile": "RUN turbo prune web --docker" },
     closures: { web: ["apps/web"] },
   });
-  const yaml = deriveFilters(
+  const { filters: yaml } = deriveFilters(
     parseInputs({
       IMAGES_JSON: '{"web": {"dockerfile_path": "./docker/web.Dockerfile"}}',
     }),
@@ -510,7 +510,7 @@ test("deriveFilters: a glob or missing source keeps both the path and path/**", 
     },
     closures: { api: ["apps/api"] },
   });
-  const yaml = deriveFilters(
+  const { filters: yaml } = deriveFilters(
     parseInputs({ IMAGES_JSON: '{"api": {"dockerfile_path": "Dockerfile"}}' }),
     io,
   );
@@ -529,9 +529,47 @@ test("deriveFilters: numeric-looking filter names are quoted keys", () => {
     dockerfiles: { Dockerfile: "RUN turbo prune api --docker" },
     closures: { api: ["apps/api"] },
   });
-  const yaml = deriveFilters(
+  const { filters: yaml } = deriveFilters(
     parseInputs({ IMAGES_JSON: '{"1.0": {"dockerfile_path": "Dockerfile"}}' }),
     io,
   );
   assert.ok(yaml.startsWith('"1.0":\n'));
+});
+
+test("deriveFilters: a scoped lockfile gets its own filter, and roots per filter", () => {
+  const { filters, roots } = deriveFilters(
+    parseInputs({
+      IMAGES_JSON,
+      LOCKFILE: "pnpm-lock.yaml",
+      AGGREGATE_FILTERS: '{"smoke": {"exclude": ["web"]}}',
+    }),
+    fakeIo(REPO),
+  );
+  assert.ok(filters.endsWith('"lockfile":\n  - "pnpm-lock.yaml"\n'));
+  assert.equal(filters.match(/pnpm-lock\.yaml/g).length, 1);
+  assert.deepEqual(roots, {
+    api: ["apps/api", "packages/db", "packages/utils"],
+    web: ["apps/web", "apps/web/assets", "packages/utils"],
+    smoke: ["apps/api", "packages/db", "packages/utils"],
+  });
+});
+
+test("parseInputs: a scoped lockfile cannot also be shared, or clash with a key", () => {
+  assert.throws(
+    () =>
+      parseInputs({
+        IMAGES_JSON,
+        LOCKFILE: "pnpm-lock.yaml",
+        SHARED_PATHS: "pnpm-lock.yaml",
+      }),
+    /both the scoped lockfile and a shared path/,
+  );
+  assert.throws(
+    () =>
+      parseInputs({
+        IMAGES_JSON: '{"lockfile": {"dockerfile_path": "Dockerfile"}}',
+        LOCKFILE: "pnpm-lock.yaml",
+      }),
+    /used twice/,
+  );
 });

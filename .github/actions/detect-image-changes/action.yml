@@ -43,6 +43,16 @@ inputs:
       Their names surface in `changed_keys`.
     required: false
     default: ""
+  scoped-lockfile:
+    description: >-
+      With derive-filters: the pnpm lockfile path (e.g. pnpm-lock.yaml) to
+      scope per image instead of listing it in shared-paths. A change to it
+      rebuilds only the images (and aggregate filters) whose slice of the
+      lockfile differs from the base: their importers, the catalog entries
+      they use, and the snapshots they reach. A base or lockfile that cannot
+      be read rebuilds everything. See README.md.
+    required: false
+    default: ""
   images:
     description: >-
       JSON object mapping image key to {dockerfile_path, image, build_args?}.
@@ -88,7 +98,7 @@ outputs:
   changed_keys:
     description: >-
       JSON array of every filter name that matched, including filters that
-      are not image keys. "[]" on workflow_dispatch or when a push has no
+      are not image keys, plus every key a scoped-lockfile change affects. "[]" on workflow_dispatch or when a push has no
       reachable diff base (when the matrix instead selects by request or
       builds everything — see the matrix step).
     value: ${{ steps.matrix.outputs.changed_keys }}
@@ -108,6 +118,7 @@ runs:
         FILTERS: ${{ inputs.filters }}
         SHARED_PATHS: ${{ inputs.shared-paths }}
         AGGREGATE_FILTERS: ${{ inputs.aggregate-filters }}
+        SCOPED_LOCKFILE: ${{ inputs.scoped-lockfile }}
       run: |
         set -euo pipefail
         fail() { echo "::error title=detect-image-changes::$1"; exit 1; }
@@ -117,7 +128,7 @@ runs:
             ;;
           false)
             [ -n "$FILTERS" ] || [ "$EVENT_NAME" = workflow_dispatch ] || fail "filters is required unless derive-filters is true"
-            [ -z "$SHARED_PATHS$AGGREGATE_FILTERS" ] || fail "shared-paths and aggregate-filters need derive-filters: true"
+            [ -z "$SHARED_PATHS$AGGREGATE_FILTERS$SCOPED_LOCKFILE" ] || fail "shared-paths, aggregate-filters and scoped-lockfile need derive-filters: true"
             ;;
           *) fail "derive-filters must be \"true\" or \"false\"" ;;
         esac
@@ -178,6 +189,7 @@ runs:
         IMAGES_JSON: ${{ inputs.images }}
         SHARED_PATHS: ${{ inputs.shared-paths }}
         AGGREGATE_FILTERS: ${{ inputs.aggregate-filters }}
+        LOCKFILE: ${{ inputs.scoped-lockfile }}
       run: node "$GITHUB_ACTION_PATH/derive-filters.cjs"
 
     # workflow_dispatch has no diff to filter; the matrix step selects by the
@@ -193,7 +205,51 @@ runs:
         base: ${{ inputs.base != '' && inputs.base || (github.event_name == 'push' && github.ref_name || '') }}
         filters: ${{ inputs.derive-filters == 'true' && steps.derive.outputs.filters || inputs.filters }}
 
-    # The matrix is the set of images whose filter matched; on
+    # The base lockfile is the push's before-commit (fetched above) or the
+    # PR's base commit, fetched the same way. When it cannot be fetched, or
+    # has no lockfile, lockfile-scope.cjs counts every image as affected.
+    - name: Scope lockfile change
+      id: lockfile
+      if: inputs.scoped-lockfile != '' && steps.filter.outputs.lockfile == 'true'
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        BEFORE_SHA: ${{ github.event.before }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        INPUT_BASE: ${{ inputs.base }}
+        REF_NAME: ${{ github.ref_name }}
+        GIT_TOKEN: ${{ inputs.token }}
+        HEAD_LOCKFILE: ${{ inputs.scoped-lockfile }}
+        LOCKFILE_ROOTS: ${{ steps.derive.outputs.roots }}
+      run: |
+        set -euo pipefail
+        # On push, only when paths-filter also diffed against event.before.
+        # Compared here, not in an expression: `==` there ignores case, and
+        # paths-filter's branch match does not. An empty BASE_SHA affects
+        # every image.
+        BASE_SHA=$PR_BASE_SHA
+        if [ "$EVENT_NAME" = push ]; then
+          BASE_SHA=""
+          if [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
+            BASE_SHA=$BEFORE_SHA
+          fi
+        fi
+        export BASE_LOCKFILE="$RUNNER_TEMP/base-lockfile"
+        rm -f "$BASE_LOCKFILE"
+        if [ -n "$BASE_SHA" ]; then
+          if ! git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
+            GIT_CONFIG_COUNT=1 \
+            GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
+              git fetch --depth=1 --no-tags origin "$BASE_SHA" || true
+          fi
+          git show "${BASE_SHA}:${HEAD_LOCKFILE}" > "$BASE_LOCKFILE" 2>/dev/null || rm -f "$BASE_LOCKFILE"
+        fi
+        node "$GITHUB_ACTION_PATH/lockfile-scope.cjs"
+
+    # The matrix is the set of images whose filter matched, or whose slice
+    # of a scoped lockfile changed; on
     # workflow_dispatch (whose skipped filter step leaves changes empty) it
     # is instead the images named in the dispatch-images input, or all of
     # them when the input is empty -- an unknown key fails the run loudly,
@@ -206,9 +262,18 @@ runs:
         IMAGES_JSON: ${{ inputs.images }}
         DISPATCH_IMAGES: ${{ inputs.dispatch-images }}
         BASE_AVAILABLE: ${{ steps.base.outputs.available }}
-        CHANGED_KEYS: ${{ steps.filter.outputs.changes }}
+        FILTER_KEYS: ${{ steps.filter.outputs.changes }}
+        LOCKFILE_KEYS: ${{ steps.lockfile.outputs.affected }}
       run: |
         set -euo pipefail
+        CHANGED_KEYS=""
+        if [ -n "$FILTER_KEYS" ]; then
+          CHANGED_KEYS=$(jq -cn '
+            (env.FILTER_KEYS | fromjson) as $filter
+            | (env.LOCKFILE_KEYS | if . == "" then "[]" else . end | fromjson) as $lockfile
+            | $filter + ($lockfile - $filter)')
+        fi
+        export CHANGED_KEYS
         matrix=$(jq -cn '
           (env.DISPATCH_IMAGES | split(",") | map(gsub("\\s"; "")) | map(select(. != ""))) as $requested
           | (env.CHANGED_KEYS | if . == null or . == "" then "[]" else . end | fromjson) as $changed
