@@ -78,8 +78,8 @@ compromised or buggy callee can read everything. It is only acceptable when the
 callee declares no `secrets:` inputs (GitHub then rejects a named list) — and
 even then, leave a comment saying so.
 
-At ISW the shared reusable workflows/actions live in the `isw-kudos` org (e.g.
-`isw-kudos/github-actions`, `isw-kudos/devops`). Reference them by SHA.
+At ISW the shared reusable workflows/actions live in the `isw-huddo` org (e.g.
+`isw-huddo/github-actions`, `isw-huddo/devops`). Reference them by SHA.
 
 ## Trigger per-service builds with path filters
 

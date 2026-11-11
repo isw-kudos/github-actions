@@ -13,15 +13,15 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | Component | Tag prefix | Watched paths | Consumers |
 |---|---|---|---|
 | docker-build | `docker-build-v` | `.github/workflows/docker-build.yml` | erc-api-v1, erc-web, erc-pdf |
-| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (replaced `isw-kudos/devops` `docker-build-generic.yml`) |
-| helm-deploy | `helm-deploy-v` | `.github/workflows/helm-deploy.yml` | boards, collab (migrating from `isw-kudos/devops` `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml`) |
+| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (replaced `isw-huddo/devops` `docker-build-generic.yml`) |
+| helm-deploy | `helm-deploy-v` | `.github/workflows/helm-deploy.yml` | boards, collab (migrating from `isw-huddo/devops` `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml`) |
 | ecs-deploy | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | erc-api-v1, erc-web, erc-pdf |
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |
 | tofu-pre-commit | `tofu-pre-commit-v` | `.github/workflows/tofu-pre-commit.yml` | nat-instance, aws-alb, aws-ecs, aws-instance, aws-vpc, mongo-atlas |
 | wait-for-required-checks | `wait-for-required-checks-v` | `.github/actions/wait-for-required-checks/**` | erc-pdf |
 | claude-code-review | `claude-code-review-v` | `.github/workflows/claude-code-review.yml` | (internal review automation) |
 | turbo-repo-cache | `turbo-repo-cache-v` | `.github/actions/turbo-repo-cache/**` | huddo (Turborepo monorepo CI) |
-| retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-kudos/devops` `retag-image` composite action) |
+| retag-images-ghcr | `retag-images-ghcr-v` | `.github/workflows/retag-images-ghcr.yml` | boards, collab (replacing the `isw-huddo/devops` `retag-image` composite action) |
 | copy-images-ghcr | `copy-images-ghcr-v` | `.github/workflows/copy-images-ghcr.yml` | collab (cross-registry image publishing) |
 | cleanup-images-ghcr | `cleanup-images-ghcr-v` | `.github/workflows/cleanup-images-ghcr.yml` | boards, collab, huddo-services (scheduled ghcr.io package cleanup) |
 | detect-image-changes | `detect-image-changes-v` | `.github/actions/detect-image-changes/**` | boards, collab, huddo-services (the `changes` job in each Images workflow) |
@@ -97,17 +97,17 @@ Pin to a component tag instead of a commit SHA or `@main`:
 
 ```yaml
 # Recommended: pin to a component tag
-uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@docker-build-v1.2.3
+uses: isw-huddo/github-actions/.github/workflows/docker-build.yml@docker-build-v1.2.3
 ```
 
 ### Renovate config for consuming repos
 
 Pin by SHA with the component tag in the trailing comment, and let one regex
-manager own every `isw-kudos/github-actions` reference:
+manager own every `isw-huddo/github-actions` reference:
 
 ```yaml
-uses: isw-kudos/github-actions/.github/actions/turbo-repo-cache@<sha> # turbo-repo-cache-v2.0.0
-uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<sha> # docker-build-v1.2.3
+uses: isw-huddo/github-actions/.github/actions/turbo-repo-cache@<sha> # turbo-repo-cache-v2.0.0
+uses: isw-huddo/github-actions/.github/workflows/docker-build.yml@<sha> # docker-build-v1.2.3
 ```
 
 ```json
@@ -115,13 +115,13 @@ uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<sha> # docker
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track every isw-kudos/github-actions component pin; the component name is captured from the tag comment so new components need no config change.",
+      "description": "Track every isw-huddo/github-actions component pin; the component name is captured from the tag comment so new components need no config change.",
       "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
       "matchStrings": [
-        "uses:\\s+isw-kudos/github-actions/(?<path>[^@\\s]+)@(?<currentDigest>[a-f0-9]{40})\\s+#\\s+(?<component>[a-z0-9-]+)-v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
+        "uses:\\s+isw-huddo/github-actions/(?<path>[^@\\s]+)@(?<currentDigest>[a-f0-9]{40})\\s+#\\s+(?<component>[a-z0-9-]+)-v(?<currentValue>\\d+\\.\\d+\\.\\d+)"
       ],
-      "depNameTemplate": "isw-kudos/github-actions/{{{component}}}",
-      "packageNameTemplate": "isw-kudos/github-actions",
+      "depNameTemplate": "isw-huddo/github-actions/{{{component}}}",
+      "packageNameTemplate": "isw-huddo/github-actions",
       "datasourceTemplate": "github-tags",
       "extractVersionTemplate": "^{{{component}}}-v(?<version>.*)$",
       "versioningTemplate": "semver"
@@ -131,12 +131,12 @@ uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<sha> # docker
     {
       "description": "The regex manager owns these pins; the built-in manager reads the comment as an opaque ref and would only duplicate digest PRs.",
       "matchManagers": ["github-actions"],
-      "matchPackageNames": ["isw-kudos/github-actions"],
+      "matchPackageNames": ["isw-huddo/github-actions"],
       "enabled": false
     },
     {
       "description": "Our own semantic-released tags do not need the third-party quarantine.",
-      "matchPackageNames": ["isw-kudos/github-actions"],
+      "matchPackageNames": ["isw-huddo/github-actions"],
       "minimumReleaseAge": null
     }
   ]
@@ -159,8 +159,8 @@ Why this shape (verified with a Renovate 44.39 dry-run lookup, 2026-09-08):
   multi-day hold on our own releases. Renovate shows a held update on the
   Dependency Dashboard under "Pending Status Checks".
 
-Reference implementations: `isw-kudos/collab`, `isw-kudos/boards`,
-`isw-kudos/huddo-services` (`renovate.json`).
+Reference implementations: `isw-huddo/huddo`, `isw-huddo/boards`,
+`isw-huddo/huddo-services` (`renovate.json`).
 
 ## Architecture
 

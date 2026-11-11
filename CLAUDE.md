@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is `isw-kudos/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`). Consumers reference it directly by component tag.
+This is `isw-huddo/github-actions` — the canonical source of reusable GitHub Actions and workflows for Docker builds, ECS deployments, and IaC validation. Each workflow is independently versioned (see `docs/per-component-versioning.md`). Consumers reference it directly by component tag.
 
 ## Commands
 
@@ -77,7 +77,7 @@ Use the matching Conventional Commit scope (`feat(ecs-deploy): ...`, `fix(docker
 | `docker-build.yml` | Build & push to ECR with multi-platform support and metadata tagging |
 | `docker-build-ghcr.yml` | Build & push to ghcr.io from the workspace context, tagged `<branch>` / `pr-N` plus `sha-<commit>` with OCI labels via `docker/metadata-action`, checking out private submodules via a GitHub App token when `.gitmodules` exists |
 | `ecs-deploy.yml` | Deploy to ECS with SSM parameter backup and automatic rollback on failure |
-| `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster; chart from `oci://ghcr.io/isw-kudos/charts` (logs in with `GITHUB_TOKEN`) or the config repo, values from the config repo |
+| `helm-deploy.yml` | Generic `helm upgrade --install` to GKE (Workload Identity) or any kubeconfig-reachable cluster; chart from `oci://ghcr.io/isw-huddo/charts` (logs in with `GITHUB_TOKEN`) or the config repo, values from the config repo |
 | `determine-image-digest.yml` | Resolve ECR image digest for a given tag |
 | `retag-images-ghcr.yml` | Point one tag at another across a list of ghcr.io images with `crane tag`: no layer pull, OCI index and digest preserved, every source resolved before any tag moves and written by that digest |
 | `copy-images-ghcr.yml` | Copy one tag of a list of ghcr.io images to another registry with `crane copy`, optionally renamed (`huddo-wikis=wikis`), by digest after resolving every source, with a job summary that compares each image against the newest existing tag on the target |

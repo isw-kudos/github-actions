@@ -39,7 +39,7 @@ A comprehensive Docker build workflow with ECR integration.
 ```yaml
 jobs:
   build:
-    uses: isw-kudos/github-actions/.github/workflows/docker-build.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/docker-build.yml@<dummy hash>
     with:
       environment: production
       architecture: linux/amd64
@@ -66,7 +66,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    uses: isw-kudos/github-actions/.github/workflows/docker-build-ghcr.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/docker-build-ghcr.yml@<dummy hash>
     with:
       dockerfile_path: apps/core/Dockerfile
       image: boards-core
@@ -80,7 +80,7 @@ Deploys applications to Amazon ECS with automatic rollback on failure.
 ```yaml
 jobs:
   deploy:
-    uses: isw-kudos/github-actions/.github/workflows/ecs-deploy.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/ecs-deploy.yml@<dummy hash>
     with:
       environment: production
       cluster_name: my-cluster
@@ -91,7 +91,7 @@ jobs:
 ```
 
 #### helm-deploy
-Generic `helm upgrade --install`. `target` picks the cluster auth (`gke` via Workload Identity Federation, `kubeconfig` via a `KUBECONFIG` secret, e.g. an on-prem cluster reachable only from a self-hosted runner) and `runner` picks where the job runs. The chart is an OCI reference on `ghcr.io` with the version as its tag (`oci://ghcr.io/isw-kudos/charts/<chart>:<version>`, one line so Renovate can bump it against the `<chart>-v<version>` tags of `isw-kudos/helm-charts`; the job logs in with its `GITHUB_TOKEN`, so the calling repo must have read access on the package) or a path in the config checkout. The values file is read from `config_repository` (the calling repo when empty); a different repo is checked out with a GitHub App token scoped to it, client id from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Waits for the rollout and rolls back on failure by default (`wait: false` to opt out). Grant exactly `contents: read`, `id-token: write` and `packages: read` on the calling job.
+Generic `helm upgrade --install`. `target` picks the cluster auth (`gke` via Workload Identity Federation, `kubeconfig` via a `KUBECONFIG` secret, e.g. an on-prem cluster reachable only from a self-hosted runner) and `runner` picks where the job runs. The chart is an OCI reference on `ghcr.io` with the version as its tag (`oci://ghcr.io/isw-huddo/charts/<chart>:<version>`, one line so Renovate can bump it against the `<chart>-v<version>` tags of `isw-huddo/helm-charts`; the job logs in with its `GITHUB_TOKEN`, so the calling repo must have read access on the package) or a path in the config checkout. The values file is read from `config_repository` (the calling repo when empty); a different repo is checked out with a GitHub App token scoped to it, client id from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Waits for the rollout and rolls back on failure by default (`wait: false` to opt out). Grant exactly `contents: read`, `id-token: write` and `packages: read` on the calling job.
 
 ```yaml
 jobs:
@@ -100,7 +100,7 @@ jobs:
       contents: read
       id-token: write
       packages: read
-    uses: isw-kudos/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
     with:
       runner: gcloud
       target: gke
@@ -110,8 +110,8 @@ jobs:
       gke_location: australia-southeast2
       gcp_workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       gcp_service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
-      config_repository: isw-kudos/devops
-      chart: oci://ghcr.io/isw-kudos/charts/huddo-boards:2.2.1
+      config_repository: isw-huddo/devops
+      chart: oci://ghcr.io/isw-huddo/charts/huddo-boards:2.2.1
       values: ./boards/staging.yaml
       namespace: boards
       release_name: staging-boards
@@ -124,13 +124,13 @@ jobs:
       contents: read
       id-token: write
       packages: read
-    uses: isw-kudos/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/helm-deploy.yml@<dummy hash>
     with:
       runner: isw
       target: kubeconfig
       environment: dev8
-      config_repository: isw-kudos/devops
-      chart: oci://ghcr.io/isw-kudos/charts/huddo-cp:1.4.0
+      config_repository: isw-huddo/devops
+      chart: oci://ghcr.io/isw-huddo/charts/huddo-cp:1.4.0
       values: ./collab/dev8.yaml
       namespace: connections
       release_name: huddo-cp
@@ -145,7 +145,7 @@ A comprehensive pre-commit workflow with OpenTofu/Terraform tooling including Go
 ```yaml
 jobs:
   pre-commit:
-    uses: isw-kudos/github-actions/.github/workflows/tofu-pre-commit.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/tofu-pre-commit.yml@<dummy hash>
 ```
 
 #### determine-image-digest
@@ -154,7 +154,7 @@ Resolves the ECR image digest for a given tag.
 ```yaml
 jobs:
   digest:
-    uses: isw-kudos/github-actions/.github/workflows/determine-image-digest.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/determine-image-digest.yml@<dummy hash>
 ```
 
 #### retag-images-ghcr
@@ -165,7 +165,7 @@ jobs:
   promote:
     permissions:
       packages: write
-    uses: isw-kudos/github-actions/.github/workflows/retag-images-ghcr.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/retag-images-ghcr.yml@<dummy hash>
     with:
       source_tag: main
       target_tag: prod
@@ -183,7 +183,7 @@ jobs:
   release:
     permissions:
       packages: read
-    uses: isw-kudos/github-actions/.github/workflows/copy-images-ghcr.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/copy-images-ghcr.yml@<dummy hash>
     with:
       source_tag: main
       target_registry: quay.io
@@ -218,7 +218,7 @@ jobs:
   untagged:
     permissions:
       packages: write
-    uses: isw-kudos/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
     with:
       dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
       packages: |
@@ -227,7 +227,7 @@ jobs:
   buildcache:
     permissions:
       packages: write
-    uses: isw-kudos/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
+    uses: isw-huddo/github-actions/.github/workflows/cleanup-images-ghcr.yml@<dummy hash>
     with:
       dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
       older_than: 1 day
@@ -241,7 +241,7 @@ Composite action. Authenticates to GCP via OIDC and starts a local Turborepo rem
 
 ```yaml
 steps:
-  - uses: isw-kudos/github-actions/.github/actions/turbo-repo-cache@<dummy hash>
+  - uses: isw-huddo/github-actions/.github/actions/turbo-repo-cache@<dummy hash>
     with:
       workload-identity-provider: projects/123/locations/global/workloadIdentityPools/POOL/providers/PROVIDER
       service-account: my-sa@my-project.iam.gserviceaccount.com
@@ -257,7 +257,7 @@ steps:
     with:
       persist-credentials: false
   - id: changes
-    uses: isw-kudos/github-actions/.github/actions/detect-image-changes@<dummy hash>
+    uses: isw-huddo/github-actions/.github/actions/detect-image-changes@<dummy hash>
     with:
       dispatch-images: ${{ inputs.images }}
       filters: |
@@ -273,7 +273,7 @@ Composite action. Exchanges the job's GitHub OIDC token for a short-lived Anthro
 ```yaml
 steps:
   - id: anthropic-auth
-    uses: isw-kudos/github-actions/.github/actions/anthropic-oidc-token@<dummy hash>
+    uses: isw-huddo/github-actions/.github/actions/anthropic-oidc-token@<dummy hash>
     with:
       organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
