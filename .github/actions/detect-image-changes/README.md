@@ -63,7 +63,7 @@ jobs:
 
       - name: Detect changed images
         id: changes
-        uses: isw-kudos/github-actions/.github/actions/detect-image-changes@<sha> # detect-image-changes-vX.Y.Z
+        uses: isw-huddo/github-actions/.github/actions/detect-image-changes@<sha> # detect-image-changes-vX.Y.Z
         with:
           dispatch-images: ${{ inputs.images }}
           filters: |
@@ -174,7 +174,7 @@ Paths that every image build reads beyond its own closure:
 ```yaml
       - name: Detect changed images
         id: changes
-        uses: isw-kudos/github-actions/.github/actions/detect-image-changes@<sha> # detect-image-changes-vX.Y.Z
+        uses: isw-huddo/github-actions/.github/actions/detect-image-changes@<sha> # detect-image-changes-vX.Y.Z
         with:
           dispatch-images: ${{ inputs.images }}
           derive-filters: "true"
