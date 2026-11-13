@@ -54,6 +54,14 @@ on:
           written for v1.0.0 keep working. New callers should not set it.
         required: false
         type: string
+      target:
+        default: ''
+        description: >-
+          Build stage to build (`docker build --target`), for a Dockerfile
+          that produces more than one image; each image is a separate call
+          with its own `image`. Empty builds the last stage.
+        required: false
+        type: string
     secrets:
       HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY:
         description: >-
@@ -239,6 +247,7 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}-buildcache:latest
           cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}-buildcache:latest,mode=max,oci-mediatypes=true,image-manifest=true
           file: ${{ inputs.dockerfile_path }}
+          target: ${{ inputs.target }}
           platforms: ${{ inputs.architecture }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -254,6 +263,7 @@ jobs:
           push: true
           build-args: ${{ inputs.build_args }}
           file: ${{ inputs.dockerfile_path }}
+          target: ${{ inputs.target }}
           platforms: ${{ inputs.architecture }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
