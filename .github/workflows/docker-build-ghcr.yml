@@ -55,9 +55,8 @@ on:
         required: false
         type: string
       target:
-        default: ''
         description: >-
-          Build stage to build (`docker build --target`), for a Dockerfile
+          Dockerfile stage to build (`docker build --target`), for a Dockerfile
           that produces more than one image; each image is a separate call
           with its own `image`. Empty builds the last stage.
         required: false
