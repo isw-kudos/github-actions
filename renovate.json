@@ -1,8 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "local>isw-kudos/renovate-config",
-    "local>isw-kudos/renovate-config:gha"
+    "local>isw-huddo/renovate-config",
+    "local>isw-huddo/renovate-config:gha"
   ],
   "pre-commit": {
     "enabled": true
@@ -190,7 +190,7 @@
       "allowedVersions": "<10"
     },
     {
-      "description": "Trivy - group the CLI version pin (tofu-pre-commit.yml setup-trivy version: input) with the setup-trivy action, gated behind Dependency Dashboard approval and never automerged; a security scanner bump should be vetted before the gate moves. Also stops the phantom pin error: the built-in github-actions manager maps setup-trivy's version: input to a virtual aquasecurity/trivy dep with no digest-pinnable literal in the file, so pinDigests fails it ('Error updating branch: update failure' on renovate/pin-dependencies). Grouping under dashboard approval keeps that pin out of the auto-attempted path. Mirrors isw-kudos/irt-flight-manager.",
+      "description": "Trivy - group the CLI version pin (tofu-pre-commit.yml setup-trivy version: input) with the setup-trivy action, gated behind Dependency Dashboard approval and never automerged; a security scanner bump should be vetted before the gate moves. Also stops the phantom pin error: the built-in github-actions manager maps setup-trivy's version: input to a virtual aquasecurity/trivy dep with no digest-pinnable literal in the file, so pinDigests fails it ('Error updating branch: update failure' on renovate/pin-dependencies). Grouping under dashboard approval keeps that pin out of the auto-attempted path. Mirrors isw-huddo/irt-flight-manager.",
       "groupName": "Trivy",
       "matchPackageNames": ["aquasecurity/trivy", "aquasecurity/setup-trivy"],
       "automerge": false,

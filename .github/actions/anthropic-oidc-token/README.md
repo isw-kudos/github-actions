@@ -24,7 +24,7 @@ jobs:
       id-token: write # OIDC token for the Anthropic exchange
     steps:
       - id: anthropic-auth
-        uses: isw-kudos/github-actions/.github/actions/anthropic-oidc-token@<sha> # anthropic-oidc-token-vX.Y.Z
+        uses: isw-huddo/github-actions/.github/actions/anthropic-oidc-token@<sha> # anthropic-oidc-token-vX.Y.Z
         with:
           organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
           workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}

@@ -9,7 +9,7 @@ name: Helm Deploy
 # checked out with a GitHub App token whose client id comes from the caller's
 # HUDDO_DEVOPS_GITHUB_APP_ID variable, scoped to that one repository.
 #
-# Charts come from a registry (`chart: oci://ghcr.io/isw-kudos/charts/<name>:<x.y.z>`,
+# Charts come from a registry (`chart: oci://ghcr.io/isw-huddo/charts/<name>:<x.y.z>`,
 # version as the tag so one line carries both and Renovate can bump it) or
 # from the config checkout; for a ghcr.io chart the job logs in with its own
 # GITHUB_TOKEN, so the calling repository must have been granted read access
@@ -37,7 +37,7 @@ on:
         default: ''
         description: >-
           owner/name of the repository holding the chart and values file
-          (e.g. isw-kudos/devops). Empty uses the calling repository at the
+          (e.g. isw-huddo/devops). Empty uses the calling repository at the
           triggering commit.
         required: false
         type: string
@@ -49,7 +49,7 @@ on:
       chart:
         description: >-
           Chart to deploy: an OCI reference with the version as its tag, e.g.
-          oci://ghcr.io/isw-kudos/charts/<name>:<x.y.z> (the job logs in to
+          oci://ghcr.io/isw-huddo/charts/<name>:<x.y.z> (the job logs in to
           ghcr.io with GITHUB_TOKEN), or a path relative to the config checkout
         required: true
         type: string
@@ -260,7 +260,7 @@ jobs:
             echo "HELM_REGISTRY_CONFIG=$RUNNER_TEMP/helm/registry.json"
           } >> "$GITHUB_ENV"
 
-      # Only ghcr.io is covered: it is where isw-kudos/helm-charts publishes,
+      # Only ghcr.io is covered: it is where isw-huddo/helm-charts publishes,
       # and GITHUB_TOKEN authenticates there (once the calling repository has
       # read access on the package). Another registry would need its own
       # credentials input.
