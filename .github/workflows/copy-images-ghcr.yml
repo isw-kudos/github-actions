@@ -192,20 +192,20 @@ jobs:
           printf '%s\n' "${targets[@]}" > "$STATE/targets"
 
       - name: Install crane
-        uses: iarekylew00t/crane-installer@8efb0e525fa83ad39276d294d67dda1cc85733d9 # v4.0.15
+        uses: iarekylew00t/crane-installer@05ef7fac709adc5ff491596ab8c73923a94e02ed # v4.0.16
         with:
           # renovate: datasource=github-releases depName=google/go-containerregistry
           crane-release: v0.22.1
 
       - name: Login to ghcr.io
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to the target registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ inputs.target_registry }}
           username: ${{ secrets.target_username }}
