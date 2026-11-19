@@ -1,31 +1,39 @@
 {
   "name": "agent-standards",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "schema": 1,
   "source": {
     "repo": "isw-kudos/agent-standards",
-    "path": "/private/tmp/claude-466497403/-Users-shattrell/0e93e37c-da7c-4d6b-a0bf-664d367531ff/scratchpad/agent-standards"
+    "path": "/Users/shattrell/Library/Application Support/Claude/local-agent-mode-sessions/ace61dac-7f0c-4e6f-8741-336ca8e1f742/155ba88b-7d0e-4170-802a-7cde2e63e818/rpm/plugin_01QaXLYBbi8UTLyCduAy7HC1"
   },
-  "importedAt": "2026-09-07T06:55:34.609Z",
+  "importedAt": "2026-11-19T23:27:37Z",
   "agents": [
     "claude"
   ],
   "modules": [
     {
       "id": "agent-workflow",
-      "version": "0.1.0"
+      "version": "0.2.1"
     },
     {
       "id": "universal-code",
-      "version": "0.1.0"
+      "version": "0.2.1"
     },
     {
       "id": "code-minimalism",
-      "version": "0.1.0"
+      "version": "0.2.1"
     },
     {
       "id": "ci-github",
-      "version": "0.1.0"
+      "version": "0.2.1"
     }
+  ],
+  "exclude": [
+    ".github/actionlint-matcher.json",
+    ".github/workflows/actionlint.yml",
+    ".github/workflows/claude-code-review.yml",
+    ".github/workflows/claude.yml",
+    ".github/workflows/zizmor.yml",
+    "renovate.json"
   ]
 }

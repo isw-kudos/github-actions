@@ -27,10 +27,9 @@ and bump it. This is enforced for third-party AND internal/org actions.
 - uses: some-org/action@main
 ```
 
-Configure Renovate with `pinDigests: true` for `github-actions` so new/edited
-`uses:` lines get pinned automatically. For internal reusable workflows/actions
-referenced with a version-comment convention, add a custom regex manager (see
-the `renovate` rule) so those digests stay current too.
+Renovate pins new/edited `uses:` lines and keeps the digests current, including
+internal reusable workflows/actions referenced with a version-comment
+convention. The org presets configure this — see the `renovate` rule.
 
 ## Declare least-privilege `permissions` per workflow
 
@@ -194,7 +193,7 @@ later step (and anything they download or execute) can read it. Set
 
 Trigger choice (`pull_request` vs `pull_request_target`), script/output
 injection from untrusted event data, protecting the workflow definition with
-CODEOWNERS + rulesets, automated scanning with zizmor, and self-hosted runner
+CODEOWNERS + rulesets, automated scanning with zizmor and actionlint, and self-hosted runner
 rules live in `workflow-security.md`. Org/repo-level Actions policy (the
 allowed-actions allowlist, default token permissions, fork-PR approval) lives
 in `actions-policy.md`. Apply those alongside this rule for any workflow change.

@@ -56,6 +56,9 @@ EOF
 )"
 ```
 
+For a visible change, show it: put screenshots or a short video in **Testing** with
+`--attach` (see the `attach-media` skill). Never commit images just to link them.
+
 ## Step 3 — review the draft locally, in a separate context
 
 Before marking it ready, review the draft **in a fresh context** (a separate

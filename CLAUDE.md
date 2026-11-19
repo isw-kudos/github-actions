@@ -129,10 +129,7 @@ All AWS access uses OIDC (no long-lived credentials). Workflows assume an IAM ro
 
 Python `3.14.3` (specified in `.python-version`). Dependencies are pinned in `.github/actions/ecs-query/requirements.txt` and updated automatically by Renovate (minor/patch auto-merged after 3-day minimum age).
 
-<!-- BEGIN ISW AGENT STANDARDS (managed by import.mjs) -->
-## ISW Agent Standards
-
-Imported modules: agent-workflow, universal-code, code-minimalism, ci-github.
+## Public repository
 
 **This repository is public.** The imported `planning` and `progress-log` rules
 do not apply here: do not commit implementation plans, progress logs, workflow
@@ -141,12 +138,17 @@ numbers of private consumer repositories. Keep PR bodies and workflow comments
 to what an outside reader needs (behaviour and rationale). Git history is the
 record of past work.
 
+<!-- BEGIN ISW AGENT STANDARDS (managed by import.mjs) -->
+## ISW Agent Standards
+
+Imported modules: agent-workflow, universal-code, code-minimalism, ci-github.
+
 Before editing a file, consult the rules in `.claude/rules/` whose frontmatter
 `paths:` globs match that file (rules with no `paths:` are always in effect).
 Use the skills in `.claude/skills/` (git, commit, branch, pr, plan, …) for their tasks.
+Code examples in the rules are TypeScript; apply the same principle in this
+project's language.
 
-Update or re-sync these standards with:
-```
-node <path-to>/agent-standards/tools/import.mjs --update
-```
+Update or re-sync with the `/isw-standards:import-isw-standards` skill, or run
+`tools/install.sh --update` (or `tools/import.mjs --update`) from agent-standards.
 <!-- END ISW AGENT STANDARDS -->
