@@ -69,8 +69,8 @@ Repo `packageRules` apply after the preset rules, and a later rule wins per
 option. So a repo rule can silently cancel a control. Never weaken these:
 
 - **Zizmor lockstep group.** The zizmor CLI pin and `zizmor-action` move in one
-  approval-gated PR. A split bump fails CI with "Unknown version"
-  (isw-kudos/boards#341). Do not add a rule that matches a zizmor package.
+  approval-gated PR. A split bump fails CI with "Unknown version".
+  Do not add a rule that matches a zizmor package.
 - **Weekly grouping.** Updates land in one weekly window as a few grouped PRs.
   Do not set a repo `schedule`, raise `prConcurrentLimit`, or split non-majors
   out of their batch.
