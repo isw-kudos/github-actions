@@ -52,8 +52,8 @@ jobs:
 
 ## 2. Automatic code review (`claude-code-review.yml`)
 
-Runs `/code-review` on every non-draft PR. Trigger on the PR lifecycle events
-that produce reviewable changes:
+Runs a **two-pass** review on every non-draft PR. Trigger on the PR lifecycle
+events that produce reviewable changes:
 
 ```yaml
 on:
@@ -61,17 +61,31 @@ on:
     types: [opened, synchronize, ready_for_review, reopened]
 ```
 
-Use the marketplace code-review plugin and pass the PR reference as the prompt:
+**Make the review rule-aware.** The generic `/code-review` plugin checks for
+correctness, reuse, and over-engineering — it does **not** know your project's
+standards. On its own it will pass a diff that violates a rule in
+`.claude/rules/` (e.g. serving internal data over external routes, or shipping a
+UI with obvious usability gaps) as long as the build is green. So the prompt runs
+the plugin **and** explicitly checks the diff against your own rules:
 
 ```yaml
 with:
   claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
   plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
   plugins: 'code-review@claude-code-plugins'
-  prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+  prompt: |
+    Review PR ${{ github.repository }}/pull/${{ github.event.pull_request.number }} in two passes and post one combined review.
+    1. Correctness & simplification — run /code-review:code-review.
+    2. Standards compliance — read .claude/rules/; for every universal rule and
+       every rule whose `paths:` glob matches a changed file, flag each violation,
+       citing the rule filename and the fix. Don't skip a rule because tests pass.
 ```
 
-Reviewing needs only read access (`contents/pull-requests: read`, `id-token: write`).
+- The action checks out the repo, so the reviewer can read `.claude/rules/`
+  directly — no extra permissions needed (reading files needs no `--allowed-tools`
+  entry).
+- Reviewing needs only read access (`contents/pull-requests: read`,
+  `id-token: write`).
 
 ## Least-privilege tool scoping is mandatory
 

@@ -1,11 +1,13 @@
 ---
-description: Security hardening for GitHub Actions — protect workflow definitions with CODEOWNERS + rulesets, choose pull_request vs pull_request_target correctly, prevent injection from untrusted event data, scan every workflow change with zizmor, and keep untrusted code off self-hosted runners.
+description: Security hardening for GitHub Actions — protect workflow definitions with CODEOWNERS + rulesets, choose pull_request vs pull_request_target correctly, prevent injection from untrusted event data, scan every workflow change with zizmor (security) and actionlint (correctness), and keep untrusted code off self-hosted runners.
 scope: universal
 paths:
   - ".github/workflows/**"
   - ".github/actions/**"
   - ".github/CODEOWNERS"
   - ".github/zizmor.yml"
+  - ".github/actionlint.yaml"
+  - ".github/actionlint-matcher.json"
 tags: [ci, github-actions, security, supply-chain]
 source: [boards, irt-flight-manager]
 ---
@@ -117,13 +119,31 @@ beware multiline payloads.
 **Path injection** — don't build file paths from untrusted input without
 validation (path traversal into the workspace or runner).
 
-## Scan every workflow change with zizmor
+## Scan every workflow change with zizmor and actionlint
 
-Manual review misses things. Run `zizmorcore/zizmor-action` on every
-`.github/**` change (see the `zizmor.yml` template): it catches unpinned
-actions, template/script injection, dangerous `pull_request_target`, excessive
-permissions, `secrets: inherit`, artifact/cache issues, and self-hosted
-exposure — and **fails the job on findings**.
+Manual review misses things. Two required layers run on every `.github/**`
+change, and both **fail the job on findings**:
+
+- **zizmor** (security, `zizmor.yml` template): unpinned actions,
+  template/script injection, dangerous `pull_request_target`, excessive
+  permissions, `secrets: inherit`, artifact/cache issues, self-hosted exposure.
+- **actionlint** (correctness, `actionlint.yml` template): YAML and workflow
+  schema validity, expression syntax, which contexts are available where,
+  action input names, `needs`/`outputs` references, and shellcheck on every
+  `run:` block.
+
+They do not overlap, and a security audit is not a parser. A change that puts
+`${{ runner.temp }}` in a job-level `env:` block is "secure", but the `runner`
+context only exists inside steps, so GitHub cannot parse the file at all: the
+workflow is dead on the default branch, every push silently runs nothing, and a
+release can be tagged on the broken commit. zizmor and pre-commit hygiene both
+pass. actionlint reports it in a second:
+
+```
+context "runner" is not allowed here. available contexts are "github", "inputs", "matrix", "needs", "secrets", "strategy", "vars"
+```
+
+### zizmor
 
 - On private repos (no GHAS) set `advanced-security: false` **and**
   `annotations: true` — both are required for inline annotations; annotations
@@ -140,6 +160,108 @@ exposure — and **fails the job on findings**.
   unreadable repo as **fatal**. If workflows reference actions in private
   repos, mint a read-only GitHub App token scoped to exactly those repos and
   pass it as the action's `token:`.
+
+### actionlint
+
+- Use the `actionlint.yml` template. It runs the `actionlint-py` PyPI wheel
+  (which bundles the Go binary) with `pipx`, which `ubuntu-latest` ships: no
+  Go toolchain, no Docker, and no extra third-party action to add to the
+  allowlist in `actions-policy.md`. It injects the `shellcheck-py` wheel into
+  the same venv so `run:` blocks are checked with the **pinned** shellcheck,
+  not whatever the runner image ships (which trails by minor versions and
+  would let a script pass locally and fail in CI, or the reverse).
+- Pin `ACTIONLINT_VERSION` and `SHELLCHECK_VERSION`; never track latest. The
+  actionlint-py version has **four** components, `<actionlint>.<package build>`
+  (e.g. `1.7.12.25`), so a three-part `# renovate:` annotation regex cannot
+  claim it. Track both with regex custom managers in `renovate.json` (one per
+  package: a `depNameTemplate` overrides a captured `depName` group, so a
+  single manager cannot serve two packages), grouped with the pre-commit rev
+  so every layer lints with the same versions. Renovate's `pre-commit`
+  manager is opt-in, so the snippet enables it; without that the rev never
+  moves and the group silently drifts:
+
+  ```json
+  {
+    "pre-commit": { "enabled": true },
+    "customManagers": [
+      {
+        "customType": "regex",
+        "description": "actionlint-py pin in the workflow env; grouped with the pre-commit rev by the actionlint packageRule.",
+        "managerFilePatterns": ["/^\\.github/workflows/actionlint\\.yml$/"],
+        "matchStrings": ["ACTIONLINT_VERSION[=:]\\s*(?<currentValue>\\d+\\.\\d+\\.\\d+\\.\\d+)"],
+        "depNameTemplate": "actionlint-py",
+        "datasourceTemplate": "pypi"
+      },
+      {
+        "customType": "regex",
+        "description": "shellcheck-py pin in the workflow env and as the pre-commit actionlint hook's additional dependency.",
+        "managerFilePatterns": [
+          "/^\\.github/workflows/actionlint\\.yml$/",
+          "/^\\.pre-commit-config\\.yaml$/"
+        ],
+        "matchStrings": [
+          "SHELLCHECK_VERSION[=:]\\s*(?<currentValue>\\d+(?:\\.\\d+)+)",
+          "shellcheck-py==(?<currentValue>\\d+(?:\\.\\d+)+)"
+        ],
+        "depNameTemplate": "shellcheck-py",
+        "datasourceTemplate": "pypi"
+      }
+    ],
+    "packageRules": [
+      {
+        "description": "actionlint toolchain - one branch for the pre-commit rev and the actionlint-py and shellcheck-py pins so every layer lints with the same versions.",
+        "groupName": "actionlint",
+        "matchPackageNames": ["actionlint-py", "Mateusz-Grzelinski/actionlint-py", "shellcheck-py"]
+      },
+      {
+        "description": "Four-part tag; the default semver-coerced versioning drops the fourth component, so build-only bumps are never offered.",
+        "matchPackageNames": ["Mateusz-Grzelinski/actionlint-py"],
+        "versioning": "loose"
+      }
+    ]
+  }
+  ```
+
+  If Renovate automerges branches without a PR (`automergeType: branch`),
+  the toolchain bump must be linted before it lands: add `renovate/**` to the
+  workflow's `push.branches` (as a pre-commit workflow would) or gate the
+  group behind dependency-dashboard approval. Otherwise a new actionlint
+  release that adds findings elsewhere in the tree merges green and turns
+  the `push: main` job red for every later workflow PR.
+
+- Mirror both pins in pre-commit so developers see the same findings before
+  they push. `shellcheck-py` gives them shellcheck without a system install:
+
+  ```yaml
+  - repo: https://github.com/Mateusz-Grzelinski/actionlint-py
+    rev: v1.7.12.25
+    hooks:
+      - id: actionlint
+        additional_dependencies: [shellcheck-py==0.11.0.1]
+  ```
+
+  If the repo runs an agent PostToolUse hook for zizmor, add a sibling for
+  actionlint with the same shape: use the system binary if it matches the
+  pin, else `uvx --from actionlint-py==<pin> actionlint`, else skip. Run it
+  from the repo root with a relative path: actionlint resolves the config's
+  `paths:` globs against the working directory, so an absolute path from
+  elsewhere silently skips the ignores. Add the hook's path to the
+  `actionlint-py` manager's `managerFilePatterns` so its pin moves with the
+  others.
+- Never silence a finding to make CI pass. A genuine false positive goes in
+  `.github/actionlint.yaml` under `paths:` → `<glob>:` → `ignore:` as a
+  commented regex; treat that file exactly like the zizmor baseline: a
+  burn-down, never an exemption list. The one known case: actionlint (as of
+  1.7.12) does not know the `$/` self-repository `uses:` syntax
+  (rhysd/actionlint#711):
+
+  ```yaml
+  paths:
+    .github/workflows/**/*.yml:
+      ignore:
+        # actionlint does not parse the `$/` self-repository `uses:` form yet (rhysd/actionlint#711)
+        - 'specifying action "\$/.+" in invalid format because ref is missing'
+  ```
 
 ## Self-hosted runners
 
@@ -173,3 +295,4 @@ trusted, internal-only workflows.
 - [ ] `persist-credentials: false` unless the job pushes back
 - [ ] No untrusted PR workload on a self-hosted runner
 - [ ] zizmor passes without new ignores or baseline entries
+- [ ] actionlint passes without new ignores

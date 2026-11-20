@@ -1,122 +1,89 @@
 ---
-description: Renovate dependency-update policy at ISW — group related packages, automerge patch/minor/digest but review majors, enforce a minimum release age, schedule in business hours, limit PR volume, and bump tool versions embedded in workflows.
+description: Renovate dependency-update policy at ISW — extend the central isw-kudos/renovate-config presets, add only repo-specific rules on top, and never re-declare or override org policy in a repo.
 scope: universal
 paths:
   - "renovate.json"
   - ".github/renovate.json"
   - ".renovaterc.json"
 tags: [ci, renovate, dependencies, supply-chain]
-source: [collab, boards, carbonhalo, terradeploy]
+source: [collab, boards, carbonhalo, terradeploy, renovate-config]
 ---
 
 # Renovate dependency updates
 
-Renovate keeps dependencies current with minimal manual toil while defending
-against malicious or broken releases. Base config on `config:recommended`.
+Org Renovate policy has one home: the shared presets in
+[`isw-kudos/renovate-config`](https://github.com/isw-kudos/renovate-config)
+(`default.json`, `npm.json`, `gha.json`). Read the policy there. Do not copy
+preset contents into a repo: a copy drifts, and every repo then needs a fix.
 
-## Group related packages into one PR
+## Extend the presets
 
-Interdependent packages must move in lockstep or a split update breaks the
-build. Add a `groupName` package rule per family, with a comment explaining
-*why* they're grouped when the reason isn't obvious.
-
-```jsonc
-"packageRules": [
-  { "groupName": "React", "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"] },
-  // vitest >= 4 requires vite >= 6, so bump them together
-  { "groupName": "Vite + Vitest", "matchPackageNames": ["vite", "vitest", "@vitest/**"] },
-  { "groupName": "Node LTS", "matchPackageNames": ["node", "@types/node"] }
-]
-```
-
-## Automerge low-risk updates, require review for majors
-
-Automerge `patch`/`minor`/`digest`. Hold `major` updates for manual review via
-the Dependency Dashboard, labelled so they're easy to spot.
+| Preset | Extend it when |
+| --- | --- |
+| `local>isw-kudos/renovate-config` | Always. It is the org baseline. |
+| `local>isw-kudos/renovate-config:npm` | The repo has a `package.json`. |
+| `local>isw-kudos/renovate-config:gha` | The repo has `.github/workflows/`. |
 
 ```jsonc
-{ "description": "Automerge minor/patch/digest", "matchUpdateTypes": ["minor", "patch", "digest"], "automerge": true },
-{ "description": "Majors need manual approval", "matchUpdateTypes": ["major"], "dependencyDashboardApproval": true, "addLabels": ["renovate/major"] }
+// ✅ the whole file for a typical repo
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>isw-kudos/renovate-config",
+    "local>isw-kudos/renovate-config:npm",
+    "local>isw-kudos/renovate-config:gha"
+  ]
+}
 ```
-
-Keep `platformAutomerge: false` unless branch protection reliably gates merges.
-
-## Enforce a minimum release age
-
-Wait several days before adopting a release so malicious or broken publishes get
-caught and yanked first. Use 3–7 days.
 
 ```jsonc
-"minimumReleaseAge": "7 days",
-"minimumReleaseAgeBehaviour": "timestamp-optional"
+// ❌ re-declares org policy: this is the old copy-paste config, now stale
+{
+  "extends": ["config:recommended", ":prConcurrentLimit10"],
+  "schedule": ["after 8am and before 6pm on monday to friday"],
+  "postUpdateOptions": ["pnpmDedupe"],
+  "customManagers": [{ "description": "Bump Node version in GitHub Actions workflows" }],
+  "packageRules": [{ "matchManagers": ["github-actions"], "pinDigests": true }]
+}
 ```
 
-## Schedule in business hours, maintain lockfiles weekly
+The presets already supply the schedule, PR limits, the workflow `node-version`
+manager, and Docker/GitHub Actions digest pinning. `pnpmDedupe` comes from
+`:npm` and has an effect only in pnpm repos. To change org policy, open a PR on
+`renovate-config` so every repo gets the change.
 
-Land updates when someone can react, in the team timezone (ISW: Tasmania).
-Refresh the lockfile once a week off-hours.
+## Add only repo-specific rules
 
-```jsonc
-"timezone": "Australia/Tasmania",
-"schedule": ["after 8am and before 6pm on monday to friday"],
-"lockFileMaintenance": { "enabled": true, "automerge": true, "schedule": ["before 6am on monday"] }
-```
+Keep a key in the repo's `renovate.json` only when it applies to this repo alone.
+Give each rule a `description` that says why.
 
-## Limit PR volume and dedupe
+- An extra group for a package family that the presets do not cover. Group
+  **majors** only; non-majors already ride the weekly batch.
+- An ignore or a version hold (`ignoreDeps`, `allowedVersions`).
+- Submodules: ignore the submodule's tree from update scanning, but keep
+  `"cloneSubmodules": true` so Renovate's builds and lockfile maintenance work.
 
-Cap open/hourly PRs so a burst of updates doesn't overwhelm CI or reviewers, and
-dedupe the lockfile after each update.
+## Do not override these preset controls
 
-```jsonc
-"extends": ["config:recommended", ":prHourlyLimit2", ":prConcurrentLimit10", ":semanticCommits", ":dependencyDashboard"],
-"postUpdateOptions": ["pnpmDedupe"]
-```
+Repo `packageRules` apply after the preset rules, and a later rule wins per
+option. So a repo rule can silently cancel a control. Never weaken these:
 
-Renovate emits `fix(deps)`/`chore(deps)` Conventional Commits (via
-`:semanticCommits`) so history stays machine-parseable.
+- **Zizmor lockstep group.** The zizmor CLI pin and `zizmor-action` move in one
+  approval-gated PR. A split bump fails CI with "Unknown version".
+  Do not add a rule that matches a zizmor package.
+- **Weekly grouping.** Updates land in one weekly window as a few grouped PRs.
+  Do not set a repo `schedule`, raise `prConcurrentLimit`, or split non-majors
+  out of their batch.
+- **Draft majors behind the Dependency Dashboard.** Majors need dashboard
+  approval and open as draft PRs. Do not automerge majors or remove the gate.
+- **SHA `pinDigests` for GitHub Actions.** Renovate keeps every `uses:` on a
+  maintained 40-char SHA, which zizmor's `unpinned-uses` audit requires. Do not
+  disable `pinDigests` or the `github-actions` manager.
 
-## Pin Docker/Actions digests
+## Commit the config before the runner discovers the repo
 
-```jsonc
-{ "matchCategories": ["docker"], "pinDigests": true },
-{ "matchManagers": ["github-actions"], "pinDigests": true }
-```
-
-`config:recommended` does **not** pin github-actions digests — you must set
-`pinDigests: true` on the `github-actions` manager explicitly (or extend
-`helpers:pinGitHubActionDigests`). Without it a hand-pinned SHA is frozen
-forever and rots, which is worse than a mutable tag: the pin is only a control
-while Renovate maintains it. Deliberately-frozen internal workflows (that you
-bump by SHA on purpose) can be excluded:
-
-```jsonc
-{ "description": "Our shared workflow is pinned manually", "matchPackageNames": ["your-org/devops"], "enabled": false }
-```
-
-## Custom regex managers for versions embedded in files
-
-Renovate can bump tool/action versions that live inside YAML/scripts, not just
-`package.json`. Add a `customManager` per pattern.
-
-```jsonc
-"customManagers": [
-  {
-    "customType": "regex",
-    "description": "Bump Node version in GitHub Actions workflows",
-    "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
-    "matchStrings": ["node-version:\\s*[\"']?(?<currentValue>\\d+)[\"']?"],
-    "depNameTemplate": "node",
-    "datasourceTemplate": "node-version",
-    "versioningTemplate": "node"
-  }
-]
-```
-
-To track an internal SHA-pinned reusable action written with a `# <name>-vX.Y.Z`
-comment, match the digest + version and resolve via `github-tags` so Renovate
-keeps both the SHA and the comment current.
-
-## Submodules
-
-Ignore a submodule's tree from update scanning but keep `"cloneSubmodules": true`
-so Renovate's own builds/lockfile maintenance still work.
+On the self-hosted Mend Renovate CE runner, a repo that already has a
+`renovate.json` skips the onboarding PR: Renovate acts on the committed config
+at once. So merge a `renovate.json` that extends the presets **before** you add
+the repo to the runner's autodiscover filter. Otherwise the first run opens PRs
+under the stale policy.
