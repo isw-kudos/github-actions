@@ -39,7 +39,7 @@ jobs:
           go-version: 1.27.4
 
       - name: Setup Terraform Docs
-        run: go install github.com/terraform-docs/terraform-docs@v0.24.0
+        run: go install github.com/terraform-docs/terraform-docs@v0.25.1
 
       - name: Setup Trivy
         uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
