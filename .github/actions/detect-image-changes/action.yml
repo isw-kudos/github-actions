@@ -75,8 +75,11 @@ inputs:
     default: ${{ github.token }}
   base:
     description: >-
-      Branch to diff push events against. Default: the pushed branch on push
-      events, empty otherwise — paths-filter's own default is the repo
+      Branch name or full 40-character lower-case commit SHA to diff push
+      events against. A SHA is the base of both the paths-filter diff and
+      the scoped-lockfile comparison, fetched with `token` in place of
+      event.before. Default: the pushed branch on push events, empty
+      otherwise — paths-filter's own default is the repo
       default branch, so a push to any other branch would diff against it
       (rebuilding everything ever changed there) via a credential-less fetch
       that fails; naming the pushed branch keeps every push diffing against
@@ -133,13 +136,15 @@ runs:
           *) fail "derive-filters must be \"true\" or \"false\"" ;;
         esac
 
-    # paths-filter diffs push events against the push's before-commit, which
-    # is outside the caller's depth-1 clone; its own fetch fails when the
-    # checkout persisted no credential, so fetch it here with a one-process
-    # GIT_CONFIG_* credential (the token never lands in a command line or on
-    # disk). Depth 1 suffices: a tree diff needs no history connectivity.
+    # paths-filter diffs push events against the push's before-commit, or
+    # against `base` itself when that is a commit SHA (its isGitSha test,
+    # matched here). That commit is outside the caller's depth-1 clone; its
+    # own fetch fails when the checkout persisted no credential, so fetch it
+    # here with a one-process GIT_CONFIG_* credential (the token never lands
+    # in a command line or on disk). Depth 1 suffices: a tree diff needs no
+    # history connectivity.
     # When there is no base to diff against -- the all-zero before of a
-    # branch-creation push, or a before-commit the remote no longer has
+    # branch-creation push, or a commit the remote no longer has
     # (force-pushed history) -- the matrix step below falls back to building
     # everything instead of failing the push run: an over-build is
     # recoverable, a red run that built nothing is not.
@@ -149,20 +154,25 @@ runs:
       shell: bash
       env:
         BEFORE_SHA: ${{ github.event.before }}
+        INPUT_BASE: ${{ inputs.base }}
         GIT_TOKEN: ${{ inputs.token }}
       # the cat-file guard is if-form, not an &&-list: under bash -e a
       # failing &&-list left operand would abort the step instead of fetching
       run: |
+        DIFF_BASE=$BEFORE_SHA
+        if [[ "$INPUT_BASE" =~ ^[a-z0-9]{40}$ ]]; then
+          DIFF_BASE=$INPUT_BASE
+        fi
         available=true
-        if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+        if [ "$DIFF_BASE" = "0000000000000000000000000000000000000000" ]; then
           available=false
         # already local (e.g. a deeper checkout): nothing to fetch
-        elif ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+        elif ! git cat-file -e "${DIFF_BASE}^{commit}" 2>/dev/null; then
           auth=$(printf 'x-access-token:%s' "$GIT_TOKEN" | base64 -w0)
           GIT_CONFIG_COUNT=1 \
           GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" \
-            git fetch --depth=1 --no-tags origin "$BEFORE_SHA" || available=false
+            git fetch --depth=1 --no-tags origin "$DIFF_BASE" || available=false
         fi
         echo "available=${available}" >> "$GITHUB_OUTPUT"
 
@@ -205,9 +215,9 @@ runs:
         base: ${{ inputs.base != '' && inputs.base || (github.event_name == 'push' && github.ref_name || '') }}
         filters: ${{ inputs.derive-filters == 'true' && steps.derive.outputs.filters || inputs.filters }}
 
-    # The base lockfile is the push's before-commit (fetched above) or the
-    # PR's base commit, fetched the same way. When it cannot be fetched, or
-    # has no lockfile, lockfile-scope.cjs counts every image as affected.
+    # The base lockfile is the push's diff base (fetched above) or the PR's
+    # base commit, fetched the same way. When it cannot be fetched, or has
+    # no lockfile, lockfile-scope.cjs counts every image as affected.
     - name: Scope lockfile change
       id: lockfile
       if: inputs.scoped-lockfile != '' && steps.filter.outputs.lockfile == 'true'
@@ -223,14 +233,17 @@ runs:
         LOCKFILE_ROOTS: ${{ steps.derive.outputs.roots }}
       run: |
         set -euo pipefail
-        # On push, only when paths-filter also diffed against event.before.
+        # On push, the commit paths-filter diffed against: a SHA base itself,
+        # or event.before when the base is empty or the pushed branch.
         # Compared here, not in an expression: `==` there ignores case, and
         # paths-filter's branch match does not. An empty BASE_SHA affects
         # every image.
         BASE_SHA=$PR_BASE_SHA
         if [ "$EVENT_NAME" = push ]; then
           BASE_SHA=""
-          if [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
+          if [[ "$INPUT_BASE" =~ ^[a-z0-9]{40}$ ]]; then
+            BASE_SHA=$INPUT_BASE
+          elif [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
             BASE_SHA=$BEFORE_SHA
           fi
         fi

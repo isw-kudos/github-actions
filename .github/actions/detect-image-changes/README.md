@@ -5,11 +5,12 @@ per repo used to inline the same three steps; this composite owns them so
 paths-filter-class fixes land once:
 
 1. **Fetch push-diff base** — paths-filter diffs push events against the
-   push's before-commit, which a depth-1 checkout with
+   push's before-commit (or a commit SHA `base`, see
+   [Push diff base](#push-diff-base)), which a depth-1 checkout with
    `persist-credentials: false` can neither see nor fetch. The action
    pre-fetches it with a one-process `GIT_CONFIG_*` extraheader credential
    (the token never lands in a command line or on disk), guarded by an
-   `if`-form `git cat-file -e "${BEFORE_SHA}^{commit}"` short-circuit (an
+   `if`-form `git cat-file -e "${DIFF_BASE}^{commit}"` short-circuit (an
    `&&`-list miss would abort under `bash -e`) and an all-zero-SHA skip
    (branch-creation pushes have no before). When the base is unreachable
    (all-zero, or force-pushed away), the matrix falls back to **building
@@ -224,9 +225,10 @@ A Dockerfile that COPYs the lockfile does not put it in that image's path
 filter; only its part decides. A glob COPY source that matches the
 lockfile (e.g. `COPY *.yaml ./`) still does, so name the files instead.
 
-The base is the push's before-commit, or `pull_request.base.sha` on a pull
-request. A pull request's lockfile at its merge commit is compared with its
-base, so the comparison holds the PR's own change. The affected keys are
+The base is the push's diff base (see [Push diff base](#push-diff-base)), or
+`pull_request.base.sha` on a pull request. A pull request's lockfile at its
+merge commit is compared with its base, so the comparison holds the PR's own
+change. The affected keys are
 added to `changed_keys` and to the matrix, and the `lockfile` filter name
 also appears in `changed_keys`.
 
@@ -253,7 +255,23 @@ image. The gain is for changes inside one app or package's dependencies.
 | `images` | yes | — | JSON object: image key → `{dockerfile_path, image, build_args?}`; key order is preserved in the matrix; missing `build_args` becomes `""` |
 | `dispatch-images` | no | `""` | comma-separated keys on `workflow_dispatch`; empty = all; unknown key fails loudly |
 | `token` | no | `github.token` | base fetch + PR file listing |
-| `base` | no | pushed branch on push, else empty | diff base override for push events |
+| `base` | no | pushed branch on push, else empty | diff base override for push events: a branch name or a full commit SHA; see [Push diff base](#push-diff-base) |
+
+### Push diff base
+
+On a push event, `base` selects the commit that paths-filter and the
+`scoped-lockfile` comparison both diff against:
+
+| `base` | Diff base |
+|---|---|
+| empty, or the pushed branch | the push's before-commit (`github.event.before`) |
+| a full 40-character lower-case commit SHA | that commit |
+| another branch name | paths-filter diffs against its merge base with that branch (this needs a credential in the checkout); a `scoped-lockfile` change then counts every image as affected |
+
+Use a SHA to diff across more than one push, for example from the last
+commit that built images. The action fetches that commit with `token` in
+place of the before-commit, so the push can be a branch creation. When the
+commit cannot be fetched, the action builds every image.
 
 ## Outputs
 
