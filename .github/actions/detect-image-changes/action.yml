@@ -75,8 +75,11 @@ inputs:
     default: ${{ github.token }}
   base:
     description: >-
-      Branch to diff push events against. Default: the pushed branch on push
-      events, empty otherwise — paths-filter's own default is the repo
+      Branch name or full 40-hex commit SHA to diff push events against. A
+      SHA is the base of both the paths-filter diff and the scoped-lockfile
+      comparison; the caller should fetch that commit first (the action
+      fetches it with `token` when it is not local). Default: the pushed
+      branch on push events, empty otherwise — paths-filter's own default is the repo
       default branch, so a push to any other branch would diff against it
       (rebuilding everything ever changed there) via a credential-less fetch
       that fails; naming the pushed branch keeps every push diffing against
@@ -205,8 +208,9 @@ runs:
         base: ${{ inputs.base != '' && inputs.base || (github.event_name == 'push' && github.ref_name || '') }}
         filters: ${{ inputs.derive-filters == 'true' && steps.derive.outputs.filters || inputs.filters }}
 
-    # The base lockfile is the push's before-commit (fetched above) or the
-    # PR's base commit, fetched the same way. When it cannot be fetched, or
+    # The base lockfile is the push's diff base (a full-SHA `base`, else the
+    # before-commit fetched above) or the PR's base commit, fetched the same
+    # way. When it cannot be fetched, or
     # has no lockfile, lockfile-scope.cjs counts every image as affected.
     - name: Scope lockfile change
       id: lockfile
@@ -223,14 +227,17 @@ runs:
         LOCKFILE_ROOTS: ${{ steps.derive.outputs.roots }}
       run: |
         set -euo pipefail
-        # On push, only when paths-filter also diffed against event.before.
+        # On push, the commit paths-filter diffed against: a SHA base itself,
+        # or event.before when the base is empty or the pushed branch.
         # Compared here, not in an expression: `==` there ignores case, and
         # paths-filter's branch match does not. An empty BASE_SHA affects
         # every image.
         BASE_SHA=$PR_BASE_SHA
         if [ "$EVENT_NAME" = push ]; then
           BASE_SHA=""
-          if [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
+          if [[ "$INPUT_BASE" =~ ^[0-9a-f]{40}$ ]]; then
+            BASE_SHA=$INPUT_BASE
+          elif [ -z "$INPUT_BASE" ] || [ "${INPUT_BASE#refs/heads/}" = "$REF_NAME" ]; then
             BASE_SHA=$BEFORE_SHA
           fi
         fi
