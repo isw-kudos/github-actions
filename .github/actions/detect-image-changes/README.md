@@ -5,11 +5,12 @@ per repo used to inline the same three steps; this composite owns them so
 paths-filter-class fixes land once:
 
 1. **Fetch push-diff base** — paths-filter diffs push events against the
-   push's before-commit, which a depth-1 checkout with
+   push's before-commit (or a commit SHA `base`, see
+   [Push diff base](#push-diff-base)), which a depth-1 checkout with
    `persist-credentials: false` can neither see nor fetch. The action
    pre-fetches it with a one-process `GIT_CONFIG_*` extraheader credential
    (the token never lands in a command line or on disk), guarded by an
-   `if`-form `git cat-file -e "${BEFORE_SHA}^{commit}"` short-circuit (an
+   `if`-form `git cat-file -e "${DIFF_BASE}^{commit}"` short-circuit (an
    `&&`-list miss would abort under `bash -e`) and an all-zero-SHA skip
    (branch-creation pushes have no before). When the base is unreachable
    (all-zero, or force-pushed away), the matrix falls back to **building
@@ -24,8 +25,7 @@ paths-filter-class fixes land once:
 3. **paths-filter** — pinned by SHA, with `base:` defaulting to the pushed
    branch on push events (multi-branch push repos would otherwise diff
    against the repo default branch) and empty elsewhere (avoids the
-   ignored-input warning on PR runs). See [Push diff base](#push-diff-base)
-   for a commit SHA `base`.
+   ignored-input warning on PR runs).
 4. **Matrix assembly** — a jq step builds the include-array from the filter
    results, or from a `workflow_dispatch` comma-separated key list (empty =
    all). Any unknown dispatch key — even alongside valid ones — **fails the
@@ -226,8 +226,9 @@ filter; only its part decides. A glob COPY source that matches the
 lockfile (e.g. `COPY *.yaml ./`) still does, so name the files instead.
 
 The base is the push's diff base (see [Push diff base](#push-diff-base)), or
-`pull_request.base.sha` on a pull request. A pull request's lockfile at its merge commit is compared with its
-base, so the comparison holds the PR's own change. The affected keys are
+`pull_request.base.sha` on a pull request. A pull request's lockfile at its
+merge commit is compared with its base, so the comparison holds the PR's own
+change. The affected keys are
 added to `changed_keys` and to the matrix, and the `lockfile` filter name
 also appears in `changed_keys`.
 
@@ -264,19 +265,13 @@ On a push event, `base` selects the commit that paths-filter and the
 | `base` | Diff base |
 |---|---|
 | empty, or the pushed branch | the push's before-commit (`github.event.before`) |
-| a full 40-hex commit SHA (lower case) | that commit |
-| another branch name | paths-filter diffs against that branch; a `scoped-lockfile` change then counts every image as affected |
+| a full 40-character lower-case commit SHA | that commit |
+| another branch name | paths-filter diffs against its merge base with that branch (this needs a credential in the checkout); a `scoped-lockfile` change then counts every image as affected |
 
 Use a SHA to diff across more than one push, for example from the last
-commit that built images. Fetch that commit in the caller before this
-action runs (`git fetch --depth=1 origin <sha>` with the checkout's
-credential). The action fetches a missing commit with `token`, but only as
-a fallback. If the commit cannot be read, the lockfile comparison counts
-every image as affected.
-
-The before-commit fetch still runs with a SHA `base`. When the push has no
-before-commit (a branch creation) or the remote no longer has it, the
-action builds every image, as it does without `base`.
+commit that built images. The action fetches that commit with `token` in
+place of the before-commit, so the push can be a branch creation. When the
+commit cannot be fetched, the action builds every image.
 
 ## Outputs
 
