@@ -30,6 +30,19 @@ on:
           Must be a local path - remote/git contexts bypass .dockerignore.
         required: false
         type: string
+      forward_only_branch_tag:
+        default: false
+        description: >-
+          On a branch build (push, workflow_dispatch, schedule), keep the
+          branch tag (`main`, `dev`) on the newest commit of the branch. The
+          image is pushed as `sha-<commit>` only; a later step points the
+          branch tag at it unless the tag already holds a newer commit. Two
+          builds of one image for consecutive commits can then finish in any
+          order without leaving the branch tag on the older commit. Each move
+          of the tag adds about 20 s to the job. Cannot be combined with the
+          deprecated `tag` input.
+        required: false
+        type: boolean
       dockerfile_path:
         default: Dockerfile
         description: Path to the Dockerfile, relative to the repository root
@@ -73,7 +86,11 @@ on:
         description: The pushed image digest
         value: ${{ jobs.build.outputs.digest }}
       tags:
-        description: The pushed image references, one ghcr.io/<owner>/<image>:<tag> per line
+        description: >-
+          The pushed image references, one ghcr.io/<owner>/<image>:<tag> per
+          line. With `forward_only_branch_tag`, the branch tag is not in the
+          list: the build does not push it, and a later step moves it only
+          when this commit is newer.
         value: ${{ jobs.build.outputs.tags }}
 
 # Keyed by image so a caller workflow may build several images from one ref
@@ -171,6 +188,14 @@ jobs:
           echo "::error::unknown cache input '${CACHE}' (expected 'auto' or 'registry')"
           exit 1
 
+      # The deprecated `tag` can name the branch tag (or its sanitised form),
+      # which the build would push directly, past the forward-only check.
+      - name: Validate tag input
+        if: ${{ inputs.forward_only_branch_tag && inputs.tag != '' }}
+        run: |
+          echo "::error::the deprecated tag input cannot be combined with forward_only_branch_tag"
+          exit 1
+
       # binfmt is only needed to emulate a foreign platform; skipping it keeps
       # the default amd64 path free of an extra Docker Hub pull.
       - name: Set up QEMU
@@ -208,7 +233,10 @@ jobs:
       # `latest` and no date tag: nothing deploys either, and a date is not
       # unique per build while the `created` label already records it. On a
       # pull request the sha is the PR head, a commit that exists in the
-      # repository, not the ephemeral refs/pull/N/merge commit.
+      # repository, not the ephemeral refs/pull/N/merge commit. With
+      # `forward_only_branch_tag` the branch tag is left out here and set by
+      # "Move branch tag forward" after the push. The `version` label then no
+      # longer reads the branch name.
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -222,7 +250,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
           flavor: latest=false
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ !inputs.forward_only_branch_tag }}
             type=ref,event=pr
             type=ref,event=tag
             type=sha,format=long
@@ -267,3 +295,28 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
+
+      # The exact branch tag "Docker metadata" would have pushed (same
+      # sanitising of the branch name), for the step below to move.
+      - name: Branch tag
+        if: ${{ inputs.forward_only_branch_tag && startsWith(github.ref, 'refs/heads/') }}
+        id: branch_meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
+          flavor: latest=false
+          tags: type=ref,event=branch
+
+      # Builds of one image for consecutive commits can run in parallel, and
+      # without this step the one that finishes last owns the branch tag, even
+      # when it built the older commit. The action points the branch tag at
+      # this build's digest only when that keeps it on the newest commit of
+      # the branch (decision table, race handling and tests in its README).
+      # `$/` runs the action from this repository at the same commit as this
+      # workflow, so a docker-build-ghcr tag pins both.
+      - name: Move branch tag forward
+        if: ${{ inputs.forward_only_branch_tag && startsWith(github.ref, 'refs/heads/') }}
+        uses: $/.github/actions/move-branch-tag
+        with:
+          branch-tag: ${{ steps.branch_meta.outputs.tags }}
+          digest: ${{ steps.build_push.outputs.digest || steps.build_push_blacksmith.outputs.digest }}

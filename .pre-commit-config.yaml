@@ -51,6 +51,12 @@ repos:
         entry: node --test .github/actions/detect-image-changes/derive-filters.test.cjs .github/actions/detect-image-changes/lockfile-scope.test.cjs
         files: ^\.github/actions/detect-image-changes/
         pass_filenames: false
+      - id: move-branch-tag-tests
+        name: move-branch-tag unit tests
+        language: system
+        entry: node --test .github/actions/move-branch-tag/index.test.cjs
+        files: ^\.github/actions/move-branch-tag/
+        pass_filenames: false
       - id: component-scope-check
         name: Check versioned component scope in commit message
         language: script

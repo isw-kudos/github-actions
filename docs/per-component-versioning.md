@@ -13,7 +13,7 @@ The primary scoping mechanism is the `paths:` filter on each release workflow. I
 | Component | Tag prefix | Watched paths | Consumers |
 |---|---|---|---|
 | docker-build | `docker-build-v` | `.github/workflows/docker-build.yml` | erc-api-v1, erc-web, erc-pdf |
-| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml` | boards, collab, huddo-services (replaced `isw-kudos/devops` `docker-build-generic.yml`) |
+| docker-build-ghcr | `docker-build-ghcr-v` | `.github/workflows/docker-build-ghcr.yml`, `.github/actions/move-branch-tag/**` | boards, collab, huddo-services (replaced `isw-kudos/devops` `docker-build-generic.yml`) |
 | helm-deploy | `helm-deploy-v` | `.github/workflows/helm-deploy.yml` | boards, collab (migrating from `isw-kudos/devops` `deploy-gcloud.yaml` / `deploy-helm-in-isw.yaml`) |
 | ecs-deploy | `ecs-deploy-v` | `.github/workflows/ecs-deploy.yml`, `.github/actions/ecs-query/**` | erc-api-v1, erc-web, erc-pdf |
 | determine-image-digest | `determine-image-digest-v` | `.github/workflows/determine-image-digest.yml` | erc-pdf |
@@ -66,7 +66,7 @@ Mapping currently in `renovate.json`:
 | Path matched by Renovate | Resulting commit | Component released |
 |---|---|---|
 | `.github/workflows/docker-build.yml` | `chore(docker-build): ...` | docker-build (patch) |
-| `.github/workflows/docker-build-ghcr.yml` | `chore(docker-build-ghcr): ...` | docker-build-ghcr (patch) |
+| `.github/workflows/docker-build-ghcr.yml`, `.github/actions/move-branch-tag/**` | `chore(docker-build-ghcr): ...` | docker-build-ghcr (patch) |
 | `.github/workflows/helm-deploy.yml` | `chore(helm-deploy): ...` | helm-deploy (patch) |
 | `.github/workflows/ecs-deploy.yml` | `chore(ecs-deploy): ...` | ecs-deploy (patch) |
 | `.github/actions/ecs-query/**` | `chore(ecs-deploy): ...` | ecs-deploy (patch) — ecs-query is part of the ecs-deploy component |
@@ -216,7 +216,7 @@ pre-commit install --hook-type commit-msg
 | Files | Scope | Resulting commit format |
 |---|---|---|
 | `.github/workflows/docker-build.yml` | `docker-build` | `chore(docker-build): ...` |
-| `.github/workflows/docker-build-ghcr.yml` | `docker-build-ghcr` | `chore(docker-build-ghcr): ...` |
+| `.github/workflows/docker-build-ghcr.yml`, `.github/actions/move-branch-tag/**` | `docker-build-ghcr` | `chore(docker-build-ghcr): ...` |
 | `.github/workflows/ecs-deploy.yml` | `ecs-deploy` | `chore(ecs-deploy): ...` |
 | `.github/actions/ecs-query/**` | `ecs-deploy` | `chore(ecs-deploy): ...` |
 | `.github/workflows/determine-image-digest.yml` | `determine-image-digest` | `chore(determine-image-digest): ...` |
