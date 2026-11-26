@@ -39,7 +39,8 @@ on:
           branch tag at it unless the tag already holds a newer commit. Two
           builds of one image for consecutive commits can then finish in any
           order without leaving the branch tag on the older commit. Each move
-          of the tag adds about 20 s to the job.
+          of the tag adds about 20 s to the job. Cannot be combined with the
+          deprecated `tag` input.
         required: false
         type: boolean
       dockerfile_path:
@@ -187,6 +188,14 @@ jobs:
           echo "::error::unknown cache input '${CACHE}' (expected 'auto' or 'registry')"
           exit 1
 
+      # The deprecated `tag` can name the branch tag (or its sanitised form),
+      # which the build would push directly, past the forward-only check.
+      - name: Validate tag input
+        if: ${{ inputs.forward_only_branch_tag && inputs.tag != '' }}
+        run: |
+          echo "::error::the deprecated tag input cannot be combined with forward_only_branch_tag"
+          exit 1
+
       # binfmt is only needed to emulate a foreign platform; skipping it keeps
       # the default amd64 path free of an extra Docker Hub pull.
       - name: Set up QEMU
@@ -226,9 +235,8 @@ jobs:
       # pull request the sha is the PR head, a commit that exists in the
       # repository, not the ephemeral refs/pull/N/merge commit. With
       # `forward_only_branch_tag` the branch tag is left out here and set by
-      # "Move branch tag forward" after the push, and so is a deprecated `tag`
-      # value equal to the branch name, which would otherwise push the branch
-      # tag directly. The `version` label then no longer reads the branch name.
+      # "Move branch tag forward" after the push. The `version` label then no
+      # longer reads the branch name.
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -246,7 +254,7 @@ jobs:
             type=ref,event=pr
             type=ref,event=tag
             type=sha,format=long
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' && !(inputs.forward_only_branch_tag && inputs.tag == github.ref_name) }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
 
       # Two build steps, one per builder: `uses:` cannot vary by condition, and
       # the inputs are the same except for the cache. The job's `digest`
