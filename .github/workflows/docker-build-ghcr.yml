@@ -30,6 +30,17 @@ on:
           Must be a local path - remote/git contexts bypass .dockerignore.
         required: false
         type: string
+      forward_only_branch_tag:
+        default: false
+        description: >-
+          On a branch build (push, workflow_dispatch, schedule), move the
+          branch tag (`main`, `dev`) only to a newer commit. The image is
+          pushed as `sha-<commit>` only; a later step points the branch tag
+          at it unless the tag already holds this commit or a newer one. Two
+          builds of one image for consecutive commits can then finish in any
+          order without leaving the branch tag on the older commit.
+        required: false
+        type: boolean
       dockerfile_path:
         default: Dockerfile
         description: Path to the Dockerfile, relative to the repository root
@@ -73,7 +84,11 @@ on:
         description: The pushed image digest
         value: ${{ jobs.build.outputs.digest }}
       tags:
-        description: The pushed image references, one ghcr.io/<owner>/<image>:<tag> per line
+        description: >-
+          The pushed image references, one ghcr.io/<owner>/<image>:<tag> per
+          line. With `forward_only_branch_tag`, the branch tag is not in the
+          list: the build does not push it, and a later step moves it only
+          when this commit is newer.
         value: ${{ jobs.build.outputs.tags }}
 
 # Keyed by image so a caller workflow may build several images from one ref
@@ -208,7 +223,10 @@ jobs:
       # `latest` and no date tag: nothing deploys either, and a date is not
       # unique per build while the `created` label already records it. On a
       # pull request the sha is the PR head, a commit that exists in the
-      # repository, not the ephemeral refs/pull/N/merge commit.
+      # repository, not the ephemeral refs/pull/N/merge commit. With
+      # `forward_only_branch_tag` the branch tag is left out here and set by
+      # "Move branch tag forward" after the push; the `version` label then
+      # reads `sha-<commit>` instead of the branch name.
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -222,7 +240,7 @@ jobs:
           images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
           flavor: latest=false
           tags: |
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ !inputs.forward_only_branch_tag }}
             type=ref,event=pr
             type=ref,event=tag
             type=sha,format=long
@@ -267,3 +285,114 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
+
+      # The exact branch tag "Docker metadata" would have pushed (same
+      # sanitising of the branch name), for the step below to move.
+      - name: Branch tag
+        if: ${{ inputs.forward_only_branch_tag && startsWith(github.ref, 'refs/heads/') }}
+        id: branch_meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image }}
+          flavor: latest=false
+          tags: type=ref,event=branch
+
+      # Builds of one image for consecutive commits can run in parallel, and
+      # without this step the one that finishes last owns the branch tag, even
+      # when it built the older commit. Here the tag moves to this build only
+      # when the commit it holds now is older, read from the
+      # org.opencontainers.image.revision label every build of this workflow
+      # carries and ordered by the compare API: `ahead` and `diverged` (a
+      # force-push) move it, `identical` and `behind` leave it. A tag that
+      # does not exist yet, an image with no revision label, or a commit the
+      # repository no longer knows (404) also move it. The move re-points the
+      # tag at the pushed manifest by digest, so an OCI index keeps its
+      # digest and nothing is rebuilt. ghcr.io has no compare-and-set on a
+      # tag, so an older build can still write between this check and the
+      # write; the tag is read back once and moved again if that happened,
+      # which narrows that window to seconds.
+      - name: Move branch tag forward
+        if: ${{ inputs.forward_only_branch_tag && startsWith(github.ref, 'refs/heads/') }}
+        env:
+          BRANCH_TAG: ${{ steps.branch_meta.outputs.tags }}
+          DIGEST: ${{ steps.build_push.outputs.digest || steps.build_push_blacksmith.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+          # Ceiling on each registry call, in seconds; ghcr.io answers in
+          # well under a second, so anything near this is a hang.
+          REGISTRY_TIMEOUT: 120
+        run: |
+          set -euo pipefail
+          if [[ ! "$BRANCH_TAG" =~ ^[a-z0-9./_-]+:[A-Za-z0-9_][A-Za-z0-9._-]*$ || ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::unexpected branch tag '$BRANCH_TAG' or digest '$DIGEST'"
+            exit 1
+          fi
+          built="${BRANCH_TAG%:*}@$DIGEST"
+          err_file="$RUNNER_TEMP/branch-tag.err"
+          declare -A ACTION_FOR_STATUS=([ahead]=move [diverged]=move [missing]=move [identical]=keep [behind]=skip)
+
+          # Sets `holder` to the commit the branch tag's image was built from:
+          # empty when the tag does not exist, `unlabelled` when the image has
+          # no 40-hex revision label. The label sits in the image config;
+          # `.Image` is that config for a single-platform image (attestation
+          # manifests are left out) and a platform-keyed map of configs for a
+          # multi-platform one, whose platforms share one revision.
+          read_holder() {
+            local config
+            if ! config=$(timeout "$REGISTRY_TIMEOUT" docker buildx imagetools inspect "$BRANCH_TAG" --format '{{json .Image}}' 2> "$err_file"); then
+              if grep -q ': not found$' "$err_file"; then
+                holder=""
+                return
+              fi
+              echo "::error::$BRANCH_TAG: could not read the current image: $(tr '\n' ' ' < "$err_file")"
+              exit 1
+            fi
+            holder=$(jq -r 'if has("rootfs") then . else first(.[]) end | .config.Labels["org.opencontainers.image.revision"] // ""' <<< "$config")
+            [[ "$holder" =~ ^[0-9a-f]{40}$ ]] || holder=unlabelled
+          }
+
+          # Sets `action` to move, keep or skip for the commit in `holder`.
+          decide() {
+            if [[ "$holder" == "$GITHUB_SHA" ]]; then
+              action=keep
+              return
+            fi
+            if [[ -z "$holder" || "$holder" == unlabelled ]]; then
+              action=move
+              return
+            fi
+            local status
+            if ! status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$holder...$GITHUB_SHA?per_page=1" --jq .status 2> "$err_file"); then
+              grep -q 'HTTP 404' "$err_file" || {
+                echo "::error::could not compare $holder with $GITHUB_SHA: $(tr '\n' ' ' < "$err_file")"
+                exit 1
+              }
+              status=missing
+            fi
+            action=${ACTION_FOR_STATUS[$status]:-}
+            if [[ -z "$action" ]]; then
+              echo "::error::unexpected compare status '$status' for $holder...$GITHUB_SHA"
+              exit 1
+            fi
+          }
+
+          for attempt in 1 2; do
+            read_holder
+            decide
+            case "$action" in
+              keep)
+                [[ $attempt -eq 2 ]] || echo "$BRANCH_TAG already holds $GITHUB_SHA"
+                break
+                ;;
+              skip)
+                echo "::notice::$BRANCH_TAG left at $holder, a newer commit than $GITHUB_SHA"
+                break
+                ;;
+              move)
+                if [[ $attempt -eq 2 ]]; then
+                  echo "::warning::$BRANCH_TAG was set to ${holder:-nothing} after this build moved it; moving it again"
+                fi
+                echo "Moving $BRANCH_TAG from ${holder:-(new tag)} to $GITHUB_SHA ($DIGEST)"
+                timeout "$REGISTRY_TIMEOUT" docker buildx imagetools create --tag "$BRANCH_TAG" "$built"
+                ;;
+            esac
+          done

@@ -52,11 +52,13 @@ Builds from the checked-out workspace (so `.dockerignore` applies) and pushes `g
 
 | Event | Tags |
 |---|---|
-| push to a branch / `workflow_dispatch` | `<branch>` (e.g. `main`), `sha-<full commit sha>` |
+| push to a branch / `workflow_dispatch` | `<branch>` (e.g. `main`; see `forward_only_branch_tag`), `sha-<full commit sha>` |
 | `pull_request` | `pr-<number>`, `sha-<PR head sha>` |
 | push of a git tag | `<tag>`, `sha-<full commit sha>` |
 
 `runner` picks where the job runs (default `ubuntu-latest`). A Blacksmith label (`blacksmith-*`) also swaps the registry build cache for Blacksmith's persistent builder cache (`useblacksmith/setup-docker-builder` + `useblacksmith/build-push-action`, keyed per image). Every build also carries the `org.opencontainers.image.*` labels and index annotations (`revision` is the same sha as the tag), so a manifest can be traced to its commit. Never `latest`, never a date. `target` builds one stage of a multi-stage Dockerfile (`docker build --target`; empty builds the last stage), so one Dockerfile can publish several images, one call per image. Each image keeps its own build cache, so stages they share are cached once per image. The `tag` input is deprecated: when set, its value is pushed as one more tag so callers written for v1.0.0 keep working. Outputs: `digest` and `tags` (one pushed reference per line).
+
+`forward_only_branch_tag` (default `false`) stops an older commit from taking the branch tag back. Builds of one image for consecutive pushes can run in parallel, and by default the build that finishes last owns `<branch>`, even when it built the older commit. With the input on, a branch build pushes only `sha-<commit>` (plus a `tag` input value), then moves `<branch>` to that image only when the commit the tag holds now is older: it reads the tag's `org.opencontainers.image.revision` label and asks the compare API (`ahead` or `diverged` moves it, `identical` or `behind` leaves it, and a missing tag moves it). The move re-points the tag at the pushed manifest by digest, with no rebuild. ghcr.io has no compare-and-set on a tag, so the step reads the tag back once and moves it again if an older build wrote it in between; the remaining window is a few seconds. With the input on, the `tags` output does not list the branch tag, and the `version` label reads `sha-<commit>` instead of the branch name. Pull request and git tag builds are not changed. The compare call uses the `contents: read` grant the job already holds.
 
 When the calling repo has a `.gitmodules` file, it mints a GitHub App token scoped to the calling repo and its same-owner submodules to check them out; the app client id comes from the caller's `HUDDO_DEVOPS_GITHUB_APP_ID` variable. Grant exactly `contents: read` and `packages: write` on the calling job; a smaller grant fails the run at startup.
 
@@ -70,6 +72,7 @@ jobs:
     with:
       dockerfile_path: apps/core/Dockerfile
       image: boards-core
+      forward_only_branch_tag: true
     secrets: # only when the repo has a private submodule
       HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY: ${{ secrets.HUDDO_DEVOPS_GITHUB_APP_PRIVATE_KEY }}
 ```
