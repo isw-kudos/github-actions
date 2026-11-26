@@ -44,6 +44,7 @@ pre-commit run --all-files
 ### Repository Layout
 
 - **`.github/actions/ecs-query/`** — Docker-based custom Python action for querying AWS ECS (services, tasks, deployments, deployment validation).
+- **`.github/actions/move-branch-tag/`** — Node action (zero dependencies, `node --test`) that `docker-build-ghcr.yml` uses to move a branch tag only forward.
 - **`.github/workflows/`** — Reusable workflows called from other repos.
 - **`releases/`** — Per-component semantic-release configs (see `docs/per-component-versioning.md`).
 
@@ -54,7 +55,7 @@ Each externally consumed component is independently versioned with a semver tag 
 | Component | Tag prefix |
 |---|---|
 | `docker-build` | `docker-build-v` |
-| `docker-build-ghcr` | `docker-build-ghcr-v` |
+| `docker-build-ghcr` | `docker-build-ghcr-v` (also covers `.github/actions/move-branch-tag/**`) |
 | `helm-deploy` | `helm-deploy-v` |
 | `ecs-deploy` | `ecs-deploy-v` (also covers `.github/actions/ecs-query/**`) |
 | `determine-image-digest` | `determine-image-digest-v` |

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - '.github/workflows/docker-build-ghcr.yml'
+      - '.github/actions/move-branch-tag/**'
   workflow_dispatch:
 
 concurrency:

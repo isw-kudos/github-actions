@@ -95,7 +95,7 @@
     },
     {
       "description": "Scope docker-build-ghcr workflow dependency updates",
-      "matchFileNames": [".github/workflows/docker-build-ghcr.yml"],
+      "matchFileNames": [".github/workflows/docker-build-ghcr.yml", ".github/actions/move-branch-tag/**"],
       "semanticCommitType": "chore",
       "semanticCommitScope": "docker-build-ghcr",
       "commitMessageSuffix": ""
